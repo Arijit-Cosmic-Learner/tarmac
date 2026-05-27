@@ -1,9 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabaseClient';
 
 const ProgressContext = createContext(null);
-
-const getStorageKey = (userId) => `tarmac_progress_${userId}`;
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -13,46 +12,119 @@ export function ProgressProvider({ children }) {
   const [streak, setStreak] = useState({ current: 0, lastPracticed: null, history: [] });
 
   useEffect(() => {
-    if (!user) { setProgress({}); setStreak({ current: 0, lastPracticed: null, history: [] }); return; }
-    const key = getStorageKey(user.id);
-    const stored = localStorage.getItem(key);
-    if (stored) {
+    if (!user) {
+      setProgress({});
+      setStreak({ current: 0, lastPracticed: null, history: [] });
+      return;
+    }
+
+    const loadProgressAndStreak = async () => {
       try {
-        const parsed = JSON.parse(stored);
-        setProgress(parsed.progress || {});
-        setStreak(parsed.streak || { current: 0, lastPracticed: null, history: [] });
-      } catch { /* ignore */ }
-    }
+        // 1. Fetch user progress
+        const { data: progressData, error: progressError } = await supabase
+          .from('user_progress')
+          .select('question_id, status')
+          .eq('user_id', user.id);
+
+        if (progressError) throw progressError;
+
+        const progressMap = {};
+        progressData?.forEach(row => {
+          progressMap[row.question_id] = row.status;
+        });
+        setProgress(progressMap);
+
+        // 2. Fetch user profile for streak info
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('streak_count, last_active_date, streak_history')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError) {
+          // If profile fetch fails or hasn't synced yet, fall back silently
+          console.warn('Profile fetch warning (might not exist yet):', profileError.message);
+          return;
+        }
+
+        if (profileData) {
+          let history = [];
+          if (profileData.streak_history) {
+            try {
+              history = typeof profileData.streak_history === 'string'
+                ? JSON.parse(profileData.streak_history)
+                : profileData.streak_history;
+            } catch (e) {
+              history = [];
+            }
+          }
+          setStreak({
+            current: profileData.streak_count || 0,
+            lastPracticed: profileData.last_active_date || null,
+            history: Array.isArray(history) ? history : [],
+          });
+        }
+      } catch (err) {
+        console.error('Error loading progress/streak:', err);
+      }
+    };
+
+    loadProgressAndStreak();
   }, [user]);
 
-  const save = useCallback((newProgress, newStreak) => {
+  const updateStatus = useCallback(async (questionId, status) => {
     if (!user) return;
-    localStorage.setItem(getStorageKey(user.id), JSON.stringify({ progress: newProgress, streak: newStreak }));
-  }, [user]);
 
-  const updateStatus = useCallback((questionId, status) => {
+    // Local state optimistic update
     const newProgress = { ...progress, [questionId]: status };
-    
-    // Streak logic
-    const today = todayStr();
-    let newStreak = { ...streak };
-    const history = [...(streak.history || [])];
-    
-    if (!history.includes(today)) {
-      history.push(today);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const wasYesterday = streak.lastPracticed === yesterday;
-      newStreak = {
-        current: wasYesterday ? (streak.current || 0) + 1 : 1,
-        lastPracticed: today,
-        history: history.slice(-30),
-      };
-    }
-
     setProgress(newProgress);
-    setStreak(newStreak);
-    save(newProgress, newStreak);
-  }, [progress, streak, save]);
+
+    try {
+      // 1. Sync to Supabase user_progress table
+      const { error: progressError } = await supabase
+        .from('user_progress')
+        .upsert({
+          user_id: user.id,
+          question_id: questionId,
+          status: status,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,question_id' });
+
+      if (progressError) throw progressError;
+
+      // 2. Streak logic calculation
+      const today = todayStr();
+      let newStreak = { ...streak };
+      const history = [...(streak.history || [])];
+      
+      if (!history.includes(today)) {
+        history.push(today);
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const wasYesterday = streak.lastPracticed === yesterday;
+        newStreak = {
+          current: wasYesterday ? (streak.current || 0) + 1 : 1,
+          lastPracticed: today,
+          history: history.slice(-30),
+        };
+
+        setStreak(newStreak);
+
+        // 3. Sync streak to profiles table
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            streak_count: newStreak.current,
+            last_active_date: newStreak.lastPracticed,
+            streak_history: newStreak.history
+          })
+          .eq('id', user.id);
+
+        if (profileError) throw profileError;
+      }
+    } catch (err) {
+      console.error('Failed to sync progress update to Supabase:', err);
+    }
+  }, [progress, streak, user]);
 
   const getStats = useCallback(() => {
     const total = Object.keys(progress).length;

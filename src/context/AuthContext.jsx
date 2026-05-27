@@ -1,64 +1,109 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext(null);
 
-const STORAGE_KEY = 'tarmac_auth';
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem(STORAGE_KEY); }
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.error('Profile fetch error:', err);
+      return null;
     }
-    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Check active session on mount
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        const userProfile = await fetchProfile(session.user.id);
+        setProfile(userProfile);
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        const userProfile = await fetchProfile(session.user.id);
+        setProfile(userProfile);
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email, password) => {
-    if (!email || !password) throw new Error('Email and password are required');
-    const userData = {
-      id: btoa(email),
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      plan: 'free',
-      joinedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+      password,
+    });
+    if (error) throw error;
+    return data.user;
   };
 
   const signup = async (email, name, password) => {
-    if (!email || !name || !password) throw new Error('All fields are required');
-    const userData = {
-      id: btoa(email),
+    const { data, error } = await supabase.auth.signUp({
       email,
-      name,
-      plan: 'free',
-      joinedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+      password,
+      options: {
+        data: {
+          full_name: name,
+        },
+      },
+    });
+    if (error) throw error;
+    return data.user;
   };
 
-  const logout = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setUser(null);
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
-  const upgradeToPaid = () => {
-    const updated = { ...user, plan: 'paid', upgradedAt: new Date().toISOString() };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    setUser(updated);
+  const upgradeToPaid = async () => {
+    if (!user) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_paid: true })
+      .eq('id', user.id);
+    
+    if (error) throw error;
+    setProfile(p => p ? { ...p, is_paid: true } : null);
   };
 
   const value = {
-    user,
+    user: user ? {
+      id: user.id,
+      email: user.email,
+      name: profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0],
+      plan: profile?.is_paid ? 'paid' : 'free',
+      joinedAt: user.created_at,
+    } : null,
     loading,
-    isPaid: user?.plan === 'paid',
+    isPaid: !!profile?.is_paid,
     isAuthenticated: !!user,
     login,
     signup,
