@@ -11,6 +11,7 @@ export default function Auth() {
   const [form, setForm] = useState({ email: '', name: '', password: '' });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, signup, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -19,8 +20,15 @@ export default function Auth() {
     if (isAuthenticated) navigate('/dashboard');
   }, [isAuthenticated, navigate]);
 
+  const handleTabChange = (newTab) => {
+    setTab(newTab);
+    setError('');
+    setSuccessMsg('');
+  };
+
   const handleGoogleLogin = async () => {
     setError('');
+    setSuccessMsg('');
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -37,15 +45,21 @@ export default function Auth() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setLoading(true);
     try {
       if (tab === 'login') {
         await login(form.email, form.password);
+        navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }
-        await signup(form.email, form.name.trim(), form.password);
+        const signUpData = await signup(form.email, form.name.trim(), form.password);
+        if (!signUpData?.session) {
+          setSuccessMsg('Account created successfully! Please check your inbox for a confirmation link to activate your account.');
+        } else {
+          navigate('/dashboard');
+        }
       }
-      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Something went wrong');
     } finally {
@@ -63,8 +77,8 @@ export default function Auth() {
         </Link>
 
         <div className="auth-tabs">
-          <button className={`auth-tab ${tab === 'login' ? 'active' : ''}`} onClick={() => setTab('login')}>Sign In</button>
-          <button className={`auth-tab ${tab === 'signup' ? 'active' : ''}`} onClick={() => setTab('signup')}>Create Account</button>
+          <button className={`auth-tab ${tab === 'login' ? 'active' : ''}`} onClick={() => handleTabChange('login')}>Sign In</button>
+          <button className={`auth-tab ${tab === 'signup' ? 'active' : ''}`} onClick={() => handleTabChange('signup')}>Create Account</button>
         </div>
 
         <div className="auth-header">
@@ -112,6 +126,7 @@ export default function Auth() {
           </div>
 
           {error && <div className="auth-error">{error}</div>}
+          {successMsg && <div className="auth-success">{successMsg}</div>}
 
           <button type="submit" className="btn-primary auth-submit" disabled={loading}>
             {loading ? 'Please wait...' : tab === 'login' ? 'Sign In' : 'Create Free Account'}
@@ -127,7 +142,7 @@ export default function Auth() {
 
         <p className="auth-switch">
           {tab === 'login' ? "Don't have an account? " : 'Already have an account? '}
-          <button className="auth-switch-btn" onClick={() => setTab(tab === 'login' ? 'signup' : 'login')}>
+          <button className="auth-switch-btn" onClick={() => handleTabChange(tab === 'login' ? 'signup' : 'login')}>
             {tab === 'login' ? 'Sign up free' : 'Sign in'}
           </button>
         </p>

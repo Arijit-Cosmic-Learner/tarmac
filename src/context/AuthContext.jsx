@@ -8,17 +8,42 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId) => {
+  const fetchProfile = async (userObj) => {
+    if (!userObj) return null;
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
-        .single();
+        .eq('id', userObj.id)
+        .maybeSingle();
       
       if (error) {
         console.error('Error fetching profile:', error);
         return null;
+      }
+
+      if (!data) {
+        // Profile does not exist, let's create it!
+        const fullName = userObj.user_metadata?.full_name || userObj.email?.split('@')[0] || 'User';
+        const newProfile = {
+          id: userObj.id,
+          full_name: fullName,
+          is_paid: false,
+          streak_count: 0,
+          last_active_date: null,
+          streak_history: []
+        };
+        const { data: insertedData, error: insertError } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('Error creating profile:', insertError);
+          return null;
+        }
+        return insertedData;
       }
       return data;
     } catch (err) {
@@ -32,7 +57,7 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        const userProfile = await fetchProfile(session.user.id);
+        const userProfile = await fetchProfile(session.user);
         setProfile(userProfile);
       }
       setLoading(false);
@@ -42,7 +67,7 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user);
-        const userProfile = await fetchProfile(session.user.id);
+        const userProfile = await fetchProfile(session.user);
         setProfile(userProfile);
       } else {
         setUser(null);
@@ -76,7 +101,7 @@ export function AuthProvider({ children }) {
       },
     });
     if (error) throw error;
-    return data.user;
+    return data;
   };
 
   const logout = async () => {
