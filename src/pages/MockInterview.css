@@ -1,0 +1,61 @@
+.mock-header { margin-bottom: 2rem; }
+.mock-header h1 { font-size: clamp(1.5rem, 3vw, 2rem); margin-bottom: 0.5rem; }
+.mock-sub { color: var(--text-secondary); font-size: 0.9rem; }
+.session-badge { display: inline-block; margin-top: 0.75rem; padding: 0.25rem 0.75rem; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2); border-radius: 20px; font-size: 0.75rem; font-weight: 600; color: #34d399; }
+
+.mock-locked { display: flex; flex-direction: column; gap: 1.5rem; max-width: 640px; }
+.mock-locked h1 { font-size: 1.75rem; }
+.mock-locked p { color: var(--text-secondary); line-height: 1.6; }
+.mock-lock-icon { color: var(--text-muted); }
+
+.mock-idle { display: flex; justify-content: center; }
+.mock-idle-card { max-width: 600px; display: flex; flex-direction: column; align-items: center; gap: 1.25rem; text-align: center; }
+.idle-icon { font-size: 3rem; }
+.mock-idle-card h2 { font-size: 1.5rem; }
+.mock-idle-card > p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; max-width: 440px; }
+.mock-rules { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; width: 100%; }
+.rule { display: flex; align-items: center; gap: 0.6rem; font-size: 0.875rem; color: var(--text-secondary); }
+.rule-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rule-dot.blue { background: #60a5fa; }
+.rule-dot.green { background: #34d399; }
+.rule-dot.lime { background: var(--lime-400); }
+.mock-start-btn { font-size: 1rem; padding: 0.875rem 2rem; }
+
+.mock-session-layout { display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start; }
+.mock-timer-panel { padding: 1.75rem; display: flex; flex-direction: column; gap: 1rem; align-items: center; }
+.mock-timer-tip p { font-size: 0.8rem; color: var(--text-muted); text-align: center; line-height: 1.5; font-style: italic; }
+
+.mock-qa-panel { display: flex; flex-direction: column; gap: 1rem; }
+.mock-question { padding: 1.5rem; display: flex; flex-direction: column; gap: 0.875rem; }
+.mock-q-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.mock-q-text { font-size: 1.0625rem; font-weight: 600; line-height: 1.5; color: var(--text-primary); }
+.mock-framework-hint { font-size: 0.8rem; color: var(--text-muted); }
+.mock-framework-hint strong { color: var(--lime-400); }
+
+.mock-answer-area { display: flex; flex-direction: column; gap: 0.75rem; }
+.mock-textarea { min-height: 180px; resize: vertical; }
+.mock-answer-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+.word-count { font-size: 0.75rem; color: var(--text-muted); }
+.mock-footer-btns { display: flex; gap: 0.5rem; }
+
+.mock-result { padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+.result-score { display: flex; align-items: center; gap: 1rem; }
+.score-circle {
+  width: 64px; height: 64px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; font-size: 1.25rem; font-weight: 800; line-height: 1;
+}
+.score-circle span { font-size: 0.65rem; color: inherit; opacity: 0.7; font-weight: 500; }
+.score-circle.good { background: rgba(52,211,153,0.15); color: #34d399; border: 2px solid #34d399; }
+.score-circle.ok { background: rgba(163, 230, 53,0.15); color: var(--lime-400); border: 2px solid var(--lime-400); }
+.score-circle.poor { background: rgba(248,113,113,0.15); color: #f87171; border: 2px solid #f87171; }
+.result-verdict { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+.result-feedback { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.7; }
+.result-section { display: flex; flex-direction: column; gap: 0.4rem; }
+.result-section-title { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.result-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.result-chips.found span { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2); color: #34d399; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; }
+.result-chips.missing span { background: rgba(163, 230, 53,0.08); border: 1px solid rgba(163, 230, 53,0.2); color: var(--lime-400); padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; }
+.result-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+
+@media (max-width: 900px) { .mock-session-layout { grid-template-columns: 1fr; } .mock-timer-panel { flex-direction: row; flex-wrap: wrap; justify-content: center; } }

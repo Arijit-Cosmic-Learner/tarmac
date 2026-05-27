@@ -1,0 +1,67 @@
+.paywall-banner {
+  background: linear-gradient(135deg, rgba(163, 230, 53, 0.12), rgba(163, 230, 53, 0.04)), var(--surface-2);
+  border: 1px solid rgba(163, 230, 53, 0.3);
+  border-radius: 20px;
+  padding: 2rem;
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.paywall-lock-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: rgba(163, 230, 53,0.12);
+  border: 1px solid rgba(163, 230, 53,0.25);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--lime-400);
+  flex-shrink: 0;
+}
+
+.paywall-content { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.5rem; }
+
+.paywall-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.paywall-sub { font-size: 0.875rem; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+
+.paywall-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.25rem;
+}
+.paywall-features span {
+  font-size: 0.8rem;
+  color: #34d399;
+  font-weight: 500;
+}
+
+.paywall-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.btn-paywall-upgrade {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, var(--lime-500), var(--lime-400));
+  color: #0a0c1b;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(163, 230, 53,0.3);
+  white-space: nowrap;
+}
+.btn-paywall-upgrade:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(163, 230, 53,0.4);
+}
+
+.paywall-cta-sub { font-size: 0.75rem; color: var(--text-muted); margin: 0; }

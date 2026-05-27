@@ -1,0 +1,6 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 3 dots forming an equilateral triangle in lime green accent -->
+  <circle cx="100" cy="50" r="22" fill="#a3e635" />
+  <circle cx="50" cy="137" r="22" fill="#a3e635" />
+  <circle cx="150" cy="137" r="22" fill="#a3e635" />
+</svg>

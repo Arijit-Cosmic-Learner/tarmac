@@ -1,0 +1,98 @@
+.framework-card {
+  background: linear-gradient(135deg, rgba(163, 230, 53, 0.1), rgba(163, 230, 53, 0.03)), var(--surface-1);
+  border: 1px solid rgba(163, 230, 53, 0.25);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.framework-header { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.framework-type-badge {
+  display: inline-block;
+  background: rgba(163, 230, 53,0.15);
+  color: var(--lime-400);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  border: 1px solid rgba(163, 230, 53,0.25);
+  width: fit-content;
+}
+
+.framework-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.framework-steps { display: flex; flex-direction: column; gap: 0.875rem; }
+
+.framework-step {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(163, 230, 53,0.15);
+  border: 1px solid rgba(163, 230, 53,0.3);
+  color: var(--lime-400);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-content { display: flex; flex-direction: column; gap: 0.25rem; }
+
+.step-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.step-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.framework-tip {
+  background: rgba(163, 230, 53,0.08);
+  border-left: 3px solid var(--lime-400);
+  border-radius: 0 8px 8px 0;
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tip-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--lime-400);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tip-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+  font-style: italic;
+}

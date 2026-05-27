@@ -1,0 +1,83 @@
+.timer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.timer-phases {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.timer-phase-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color 0.2s;
+}
+.timer-phase-dot.current { color: var(--text-primary); }
+.timer-phase-dot.done { color: #34d399; }
+
+.timer-ring-wrap {
+  position: relative;
+  width: 104px; height: 104px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.timer-center {
+  position: absolute;
+  display: flex; flex-direction: column; align-items: center;
+}
+
+.timer-time {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.timer-phase-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.timer-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+  text-align: center;
+}
+
+.timer-controls { display: flex; gap: 0.5rem; }
+
+.timer-btn {
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.timer-btn.start, .timer-btn.pause {
+  background: var(--lime-400);
+  color: #0a0c1b;
+}
+.timer-btn.start:hover, .timer-btn.pause:hover { background: var(--lime-300); }
+.timer-btn.reset {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.timer-btn.reset:hover { color: var(--text-primary); }
