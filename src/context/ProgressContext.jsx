@@ -18,6 +18,14 @@ export function ProgressProvider({ children }) {
       return;
     }
 
+    if (user.id === '00000000-0000-0000-0000-000000000000') {
+      const localProgress = localStorage.getItem('tarmac_guest_progress');
+      const localStreak = localStorage.getItem('tarmac_guest_streak');
+      setProgress(localProgress ? JSON.parse(localProgress) : {});
+      setStreak(localStreak ? JSON.parse(localStreak) : { current: 3, lastPracticed: todayStr(), history: [todayStr()] });
+      return;
+    }
+
     const loadProgressAndStreak = async () => {
       try {
         // 1. Fetch user progress
@@ -78,6 +86,28 @@ export function ProgressProvider({ children }) {
     // Local state optimistic update
     const newProgress = { ...progress, [questionId]: status };
     setProgress(newProgress);
+
+    if (user.id === '00000000-0000-0000-0000-000000000000') {
+      localStorage.setItem('tarmac_guest_progress', JSON.stringify(newProgress));
+      
+      const today = todayStr();
+      let newStreak = { ...streak };
+      const history = [...(streak.history || [])];
+      
+      if (!history.includes(today)) {
+        history.push(today);
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const wasYesterday = streak.lastPracticed === yesterday;
+        newStreak = {
+          current: wasYesterday ? (streak.current || 0) + 1 : 1,
+          lastPracticed: today,
+          history: history.slice(-30),
+        };
+        setStreak(newStreak);
+        localStorage.setItem('tarmac_guest_streak', JSON.stringify(newStreak));
+      }
+      return;
+    }
 
     try {
       // 1. Sync to Supabase user_progress table

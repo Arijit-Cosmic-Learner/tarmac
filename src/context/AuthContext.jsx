@@ -3,9 +3,25 @@ import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext(null);
 
+const GUEST_USER = {
+  id: '00000000-0000-0000-0000-000000000000',
+  email: 'guest@tarmac.com',
+  user_metadata: { full_name: 'Guest Candidate' },
+  created_at: new Date().toISOString(),
+};
+
+const GUEST_PROFILE = {
+  id: '00000000-0000-0000-0000-000000000000',
+  full_name: 'Guest Candidate',
+  is_paid: true,
+  streak_count: 3,
+  last_active_date: new Date().toISOString().split('T')[0],
+  streak_history: []
+};
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [user, setUser] = useState(GUEST_USER);
+  const [profile, setProfile] = useState(GUEST_PROFILE);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userObj) => {
@@ -59,6 +75,9 @@ export function AuthProvider({ children }) {
         setUser(session.user);
         const userProfile = await fetchProfile(session.user);
         setProfile(userProfile);
+      } else {
+        setUser(GUEST_USER);
+        setProfile(GUEST_PROFILE);
       }
       setLoading(false);
     });
@@ -70,8 +89,8 @@ export function AuthProvider({ children }) {
         const userProfile = await fetchProfile(session.user);
         setProfile(userProfile);
       } else {
-        setUser(null);
-        setProfile(null);
+        setUser(GUEST_USER);
+        setProfile(GUEST_PROFILE);
       }
       setLoading(false);
     });
@@ -106,10 +125,16 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    setUser(GUEST_USER);
+    setProfile(GUEST_PROFILE);
   };
 
   const upgradeToPaid = async () => {
     if (!user) return;
+    if (user.id === GUEST_USER.id) {
+      setProfile(p => p ? { ...p, is_paid: true } : GUEST_PROFILE);
+      return;
+    }
     const { error } = await supabase
       .from('profiles')
       .update({ is_paid: true })
