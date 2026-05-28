@@ -63,6 +63,7 @@ export default async function handler(req, res) {
     // Signature verified, parse payload
     const eventData = JSON.parse(rawBody.toString('utf8'));
     console.log(`Razorpay webhook verified: event = ${eventData.event}`);
+    console.log('Webhook Payload:', JSON.stringify(eventData, null, 2));
 
     // We specifically care about payment.captured
     if (eventData.event === 'payment.captured') {
