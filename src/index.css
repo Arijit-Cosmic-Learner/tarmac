@@ -2,28 +2,31 @@
 
 /* ─── DESIGN TOKENS ─────────────────────────── */
 :root {
-  --black-950: #000000;
-  --black-900: #09090b;
-  --black-800: #18181b;
-  --black-700: #27272a;
-  --black-600: #3f3f46;
-  --black-500: #52525b;
+  --black-950: #0B0C10;
+  --black-900: #12131A;
+  --black-800: #1F2833;
+  --black-700: #2C3540;
+  --black-600: #475569;
+  --black-500: #64748B;
 
-  --lime-300: #bef264;
-  --lime-400: #a3e635;
-  --lime-500: #84cc16;
-  --lime-600: #65a30d;
+  /* Runway Orange Palette mapping to legacy lime classes */
+  --lime-300: #FFC299;
+  --lime-400: #FFA366;
+  --lime-500: #FF5C00;
+  --lime-600: #E04D00;
 
-  --surface-1: #09090b;
-  --surface-2: #18181b;
-  --surface-3: #27272a;
+  --surface-1: #1F2833;
+  --surface-2: #12131A;
+  --surface-3: #2C3540;
 
   --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(163, 230, 53, 0.3);
+  --border-hover: rgba(255, 92, 0, 0.35);
 
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
+  --text-primary: #FFFFFF;
+  --text-secondary: #C5C6C7;
+  --text-muted: #6B7280;
+
+  --navbar-bg: 11, 12, 16;
 
   --bg: var(--black-950);
   --radius-sm: 8px;
@@ -34,9 +37,42 @@
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-display: 'DM Serif Display', Georgia, serif;
 
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
-  --shadow-md: 0 8px 32px rgba(0,0,0,0.3);
-  --shadow-lg: 0 16px 64px rgba(0,0,0,0.4);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-md: 0 8px 32px rgba(0,0,0,0.5);
+  --shadow-lg: 0 16px 64px rgba(0,0,0,0.6);
+}
+
+:root[data-theme='light'] {
+  --black-950: #F4F6F9;
+  --black-900: #E2E8F0;
+  --black-800: #FFFFFF;
+  --black-700: #CBD5E1;
+  --black-600: #94A3B8;
+  --black-500: #64748B;
+
+  --lime-300: #FF9F66;
+  --lime-400: #FF7A2B;
+  --lime-500: #FF5C00;
+  --lime-600: #D94E00;
+
+  --surface-1: #FFFFFF;
+  --surface-2: #F1F5F9;
+  --surface-3: #E2E8F0;
+
+  --border: rgba(15, 23, 42, 0.08);
+  --border-hover: rgba(255, 92, 0, 0.45);
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+
+  --navbar-bg: 244, 246, 249;
+
+  --bg: var(--black-950);
+
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md: 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-lg: 0 16px 64px rgba(0,0,0,0.12);
 }
 
 /* ─── GLOBAL RESET ──────────────────────────── */
@@ -101,12 +137,12 @@ a { color: inherit; }
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 20px rgba(163, 230, 53,0.25);
+  box-shadow: 0 4px 20px rgba(255, 92, 0, 0.2);
   font-family: var(--font-body);
 }
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(163, 230, 53,0.35);
+  box-shadow: 0 8px 32px rgba(255, 92, 0, 0.35);
 }
 .btn-primary:active { transform: translateY(0); }
 
@@ -170,7 +206,7 @@ a { color: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.pill-lime { background: rgba(163, 230, 53,0.12); color: var(--lime-400); border: 1px solid rgba(163, 230, 53,0.2); }
+.pill-lime { background: rgba(255, 92, 0, 0.1); color: var(--lime-400); border: 1px solid rgba(255, 92, 0, 0.2); }
 .pill-green { background: rgba(52,211,153,0.1); color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
 .pill-blue { background: rgba(96,165,250,0.1); color: #60a5fa; border: 1px solid rgba(96,165,250,0.2); }
 .pill-red { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
@@ -197,14 +233,14 @@ a { color: inherit; }
 
 /* ─── GRADIENT ACCENTS ──────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, var(--lime-400), #d9f99d);
+  background: linear-gradient(135deg, var(--lime-500), #ffcc99);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 /* ─── GLOW EFFECTS ──────────────────────────── */
-.glow-lime { box-shadow: 0 0 40px rgba(163, 230, 53,0.12); }
+.glow-lime { box-shadow: 0 0 40px rgba(255, 92, 0, 0.15); }
 
 /* ─── DIVIDER ───────────────────────────────── */
 .divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
@@ -253,7 +289,7 @@ a { color: inherit; }
   transition: border-color 0.15s;
 }
 .form-input::placeholder { color: var(--text-muted); }
-.form-input:focus { border-color: var(--lime-400); box-shadow: 0 0 0 3px rgba(163, 230, 53,0.1); }
+.form-input:focus { border-color: var(--lime-400); box-shadow: 0 0 0 3px rgba(255, 92, 0, 0.15); }
 
 .form-label {
   display: block;

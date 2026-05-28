@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, BarChart2, Building2, Library, Play, Menu, X } from 'lucide-react';
+import { BookOpen, BarChart2, Building2, Library, Play, Menu, X, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 import './Navbar.css';
 
 const navLinks = [
@@ -14,6 +15,7 @@ const navLinks = [
 
 export default function Navbar() {
   const { user, isPaid, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -43,6 +45,9 @@ export default function Navbar() {
         )}
 
         <div className="navbar-right">
+          <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
           {user ? (
             <div className="user-menu">
               <button className="user-avatar-btn" onClick={() => setDropdownOpen(o => !o)}>
