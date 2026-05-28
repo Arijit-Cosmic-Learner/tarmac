@@ -84,10 +84,16 @@ export function AuthProvider({ children }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('onAuthStateChange: Auth event received:', event);
       if (session?.user) {
         setUser(session.user);
-        const userProfile = await fetchProfile(session.user);
-        setProfile(userProfile);
+        // Only fetch/create profile on SIGNED_IN or INITIAL_SESSION
+        // Avoid doing it on USER_UPDATED to prevent database call deadlock during updateUser
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          console.log('onAuthStateChange: Fetching user profile from DB...');
+          const userProfile = await fetchProfile(session.user);
+          setProfile(userProfile);
+        }
       } else {
         setUser(GUEST_USER);
         setProfile(GUEST_PROFILE);
@@ -163,12 +169,53 @@ export function AuthProvider({ children }) {
   };
 
   const updateUserMetadata = async (metadata) => {
-    const { data, error } = await supabase.auth.updateUser({
-      data: metadata
-    });
-    if (error) throw error;
-    setUser(data.user);
-    return data.user;
+    try {
+      console.log('updateUserMetadata: updating user metadata with:', metadata);
+      
+      // Wrap the updateUser call with a 5-second timeout safety net
+      const updatePromise = supabase.auth.updateUser({
+        data: metadata
+      });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Update request timed out. Please try again.")), 5000)
+      );
+
+      const { data, error } = await Promise.race([updatePromise, timeoutPromise]);
+      
+      if (error) {
+        console.error('updateUserMetadata: auth.updateUser error:', error);
+        throw error;
+      }
+      
+      console.log('updateUserMetadata: auth.updateUser success:', data);
+
+      // Sync display name change to profiles table in the database (non-blocking)
+      if (metadata.full_name) {
+        console.log('updateUserMetadata: syncing full_name to profiles table (non-blocking):', metadata.full_name);
+        supabase
+          .from('profiles')
+          .update({ full_name: metadata.full_name })
+          .eq('id', data.user.id)
+          .then(({ error: profileError }) => {
+            if (profileError) {
+              console.error('updateUserMetadata: profile sync error:', profileError);
+            } else {
+              console.log('updateUserMetadata: profile sync success');
+              setProfile(prev => prev ? { ...prev, full_name: metadata.full_name } : prev);
+            }
+          })
+          .catch(err => {
+            console.error('updateUserMetadata: profile sync exception:', err);
+          });
+      }
+
+      setUser(data.user);
+      return data.user;
+    } catch (err) {
+      console.error('updateUserMetadata failed:', err);
+      throw err;
+    }
   };
 
   const upgradeToPaid = async () => {

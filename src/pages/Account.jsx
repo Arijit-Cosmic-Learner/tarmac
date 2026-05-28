@@ -6,6 +6,9 @@ import './Account.css';
 export default function Account() {
   const { user, updateUserMetadata } = useAuth();
   
+  // Check if details are already present
+  const hasDetails = !!(user?.phone || user?.company || user?.role || user?.linkedin);
+  
   const [formData, setFormData] = useState({
     full_name: '',
     phone: '',
@@ -51,7 +54,7 @@ export default function Account() {
       setStatus({ type: 'success', message: 'Account settings saved successfully!' });
     } catch (err) {
       console.error(err);
-      setStatus({ type: 'error', message: 'Failed to save settings. Please try again.' });
+      setStatus({ type: 'error', message: err.message || 'Failed to save settings. Please try again.' });
     } finally {
       setIsSaving(false);
     }
@@ -150,7 +153,7 @@ export default function Account() {
                 {isSaving ? 'Saving...' : (
                   <>
                     <Save size={18} />
-                    Save Changes
+                    {hasDetails ? 'Edit Details' : 'Save Changes'}
                   </>
                 )}
               </button>
