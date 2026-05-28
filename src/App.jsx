@@ -10,6 +10,7 @@ import MockInterview from './pages/MockInterview';
 import Companies from './pages/Companies';
 import Resources from './pages/Resources';
 import Pricing from './pages/Pricing';
+import Account from './pages/Account';
 
 // Route guard: redirect to /login if not authenticated
 function PrivateRoute({ children }) {
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/mock" element={<PrivateRoute><MockInterview /></PrivateRoute>} />
         <Route path="/companies" element={<PrivateRoute><Companies /></PrivateRoute>} />
         <Route path="/resources" element={<PrivateRoute><Resources /></PrivateRoute>} />
+        <Route path="/account" element={<PrivateRoute><Account /></PrivateRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

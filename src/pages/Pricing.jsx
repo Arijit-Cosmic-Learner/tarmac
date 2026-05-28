@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Check, Zap } from 'lucide-react';
+import { Check, Zap, Loader } from 'lucide-react';
 import './Pricing.css';
 
 const FREE_FEATURES = [
@@ -20,13 +21,133 @@ const PRO_FEATURES = [
   'New content added monthly',
 ];
 
+// Dynamically load the Razorpay checkout script
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function Pricing() {
   const { user, isPaid, upgradeToPaid } = useAuth();
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(null); // 'success' | 'error' | null
+  const [paymentMessage, setPaymentMessage] = useState('');
 
-  const handleUpgrade = () => {
-    // In production: open Razorpay. For MVP: simulate upgrade.
-    const confirmed = window.confirm('This would open Razorpay payment. For this demo, we\'ll simulate a successful upgrade. Continue?');
-    if (confirmed) upgradeToPaid();
+  // Pre-load Razorpay script on mount for faster checkout
+  useEffect(() => {
+    loadRazorpayScript();
+  }, []);
+
+  const handleUpgrade = async () => {
+    setCheckoutLoading(true);
+    setPaymentStatus(null);
+    setPaymentMessage('');
+
+    // Step 1: Ensure Razorpay script is loaded
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      setPaymentStatus('error');
+      setPaymentMessage('Failed to load payment gateway. Please check your connection and try again.');
+      setCheckoutLoading(false);
+      return;
+    }
+
+    // Step 2: Create order via our secure serverless backend
+    let orderData;
+    try {
+      const res = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: 49900, // ₹499 in paise
+          currency: 'INR',
+          userId: user?.id || 'guest',
+        }),
+      });
+      orderData = await res.json();
+      if (!res.ok) throw new Error(orderData.error || 'Could not create order');
+    } catch (err) {
+      setPaymentStatus('error');
+      setPaymentMessage(err.message || 'Failed to initiate payment. Please try again.');
+      setCheckoutLoading(false);
+      return;
+    }
+
+    setCheckoutLoading(false);
+
+    // Step 3: Open Razorpay checkout modal
+    const options = {
+      key: 'rzp_test_Suhia3L6uLade0',
+      amount: orderData.amount,
+      currency: orderData.currency,
+      name: 'Tarmac',
+      description: 'Pro Plan — ₹499/month',
+      image: `${window.location.origin}/tarmac-icon-transparent.svg`,
+      order_id: orderData.order_id,
+      prefill: {
+        name: user?.name || '',
+        email: user?.email || '',
+        contact: user?.phone || '',
+      },
+      notes: {
+        userId: user?.id || '',
+      },
+      theme: {
+        color: '#a3e635', // Tarmac lime-green
+      },
+
+      // ── Success Handler ───────────────────────────────────────────────────
+      handler: async function (response) {
+        try {
+          const verifyRes = await fetch('/api/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              userId: user?.id,
+            }),
+          });
+          const verifyData = await verifyRes.json();
+          if (!verifyRes.ok) throw new Error(verifyData.error);
+
+          // Upgrade local state immediately
+          await upgradeToPaid();
+          setPaymentStatus('success');
+          setPaymentMessage('🎉 Welcome to Pro! All features are now unlocked.');
+        } catch (err) {
+          setPaymentStatus('error');
+          setPaymentMessage(
+            `Payment received but verification failed: ${err.message}. Please contact support with payment ID: ${response.razorpay_payment_id}`
+          );
+        }
+      },
+
+      modal: {
+        ondismiss: () => {
+          setCheckoutLoading(false);
+        },
+      },
+    };
+
+    const rzp = new window.Razorpay(options);
+
+    // ── Failure Handler ───────────────────────────────────────────────────
+    rzp.on('payment.failed', function (response) {
+      setPaymentStatus('error');
+      setPaymentMessage(
+        `Payment failed: ${response.error.description}. Reason: ${response.error.reason}. Please try again or use a different payment method.`
+      );
+    });
+
+    rzp.open();
   };
 
   return (
@@ -40,6 +161,13 @@ export default function Pricing() {
             No dark patterns. No features hidden behind "contact us." Two tiers, clearly explained.
           </p>
         </div>
+
+        {/* Payment status banner */}
+        {paymentStatus && (
+          <div className={`payment-banner payment-banner--${paymentStatus}`}>
+            {paymentMessage}
+          </div>
+        )}
 
         <div className="pricing-grid">
           {/* Free */}
@@ -73,7 +201,7 @@ export default function Pricing() {
             </div>
             {user ? (
               <div className="current-plan-badge">
-                {isPaid ? 'You\'re on Pro' : '✓ Current Plan'}
+                {isPaid ? "You're on Pro" : '✓ Current Plan'}
               </div>
             ) : (
               <a href="/login?tab=signup" className="btn-secondary pricing-cta">Start Free</a>
@@ -105,9 +233,16 @@ export default function Pricing() {
             {isPaid ? (
               <div className="current-plan-badge pro">✓ Current Plan — Pro</div>
             ) : (
-              <button className="btn-primary pricing-cta pro-cta" onClick={handleUpgrade}>
-                <Zap size={16} />
-                {user ? 'Upgrade to Pro' : 'Get Pro Access'}
+              <button
+                className="btn-primary pricing-cta pro-cta"
+                onClick={handleUpgrade}
+                disabled={checkoutLoading}
+              >
+                {checkoutLoading ? (
+                  <><Loader size={16} className="spin" /> Preparing checkout...</>
+                ) : (
+                  <><Zap size={16} /> {user ? 'Upgrade to Pro' : 'Get Pro Access'}</>
+                )}
               </button>
             )}
           </div>
@@ -118,12 +253,12 @@ export default function Pricing() {
           <h2>Common questions</h2>
           <div className="faq-grid">
             {[
-              { q: 'What does "cancel anytime" mean?', a: 'You can cancel your Pro subscription at any time. You\'ll retain access until the end of your billing period.' },
+              { q: 'What does "cancel anytime" mean?', a: "You can cancel your Pro subscription at any time. You'll retain access until the end of your billing period." },
               { q: 'Is this really built for non-CS grads?', a: 'Yes — 100%. Every question, answer, and resource is written assuming you did not study computer science. The technical concepts are explained in plain language.' },
               { q: 'How often is content updated?', a: 'We add new questions, company profiles, and resources every month. Pro users get access to all new content automatically.' },
               { q: 'Will this help for TAM / Pre-Sales roles too?', a: 'Most of the Solutions Engineer questions directly apply to TAM and Pre-Sales roles. Dedicated tracks for these roles are coming in Q2 2025.' },
-              { q: 'Is my data safe?', a: 'For this version, your progress is stored in your browser\'s local storage. We never send your data to third parties.' },
-              { q: 'What if I\'m already placed?', a: 'Pass it on. Send Tarmac to a junior from your college who\'s still figuring out how to prepare. Pay it forward.' },
+              { q: 'Is my data safe?', a: "Your progress is stored securely in your account. We never send your data to third parties." },
+              { q: "What if I'm already placed?", a: 'Pass it on. Send Tarmac to a junior from your college who\'s still figuring out how to prepare. Pay it forward.' },
             ].map((item, i) => (
               <div key={i} className="faq-item">
                 <h4 className="faq-q">{item.q}</h4>

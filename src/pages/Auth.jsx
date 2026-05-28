@@ -13,7 +13,7 @@ export default function Auth() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, signup, isAuthenticated } = useAuth();
+  const { login, signup, loginWithGoogle, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -30,13 +30,7 @@ export default function Auth() {
     setError('');
     setSuccessMsg('');
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin + '/dashboard',
-        },
-      });
-      if (error) throw error;
+      await loginWithGoogle();
     } catch (err) {
       setError(err.message || 'Google Sign-In failed');
     }

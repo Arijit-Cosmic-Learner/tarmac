@@ -106,7 +106,23 @@ export function AuthProvider({ children }) {
       password,
     });
     if (error) throw error;
+    
+    setUser(data.user);
+    const userProfile = await fetchProfile(data.user);
+    setProfile(userProfile);
+    
     return data.user;
+  };
+
+  const loginWithGoogle = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      }
+    });
+    if (error) throw error;
+    return data;
   };
 
   const signup = async (email, name, password) => {
@@ -124,9 +140,35 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    // 1. Forcefully clear any stuck Supabase tokens from localStorage synchronously
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sb-')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      console.error('localStorage clear error', e);
+    }
+    
+    // 2. Optimistically clear the React state
     setUser(GUEST_USER);
     setProfile(GUEST_PROFILE);
+
+    // 3. Fire and forget the network request
+    supabase.auth.signOut().catch(err => console.error('Error during sign out:', err));
+  };
+
+  const updateUserMetadata = async (metadata) => {
+    const { data, error } = await supabase.auth.updateUser({
+      data: metadata
+    });
+    if (error) throw error;
+    setUser(data.user);
+    return data.user;
   };
 
   const upgradeToPaid = async () => {
@@ -144,20 +186,29 @@ export function AuthProvider({ children }) {
     setProfile(p => p ? { ...p, is_paid: true } : null);
   };
 
+  const isRealUser = user && user.id !== GUEST_USER.id;
+
   const value = {
-    user: user ? {
+    user: isRealUser ? {
       id: user.id,
       email: user.email,
-      name: profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0],
+      name: user.user_metadata?.full_name || profile?.full_name || user.email.split('@')[0],
+      avatar: user.user_metadata?.avatar_url,
+      phone: user.user_metadata?.phone || '',
+      company: user.user_metadata?.company || '',
+      role: user.user_metadata?.role || '',
+      linkedin: user.user_metadata?.linkedin || '',
       plan: profile?.is_paid ? 'paid' : 'free',
       joinedAt: user.created_at,
     } : null,
     loading,
     isPaid: !!profile?.is_paid,
-    isAuthenticated: !!user,
+    isAuthenticated: isRealUser,
     login,
+    loginWithGoogle,
     signup,
     logout,
+    updateUserMetadata,
     upgradeToPaid,
   };
 

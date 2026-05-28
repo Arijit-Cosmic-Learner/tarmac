@@ -18,7 +18,10 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const handleLogout = () => { logout(); navigate('/'); };
+  const handleLogout = () => { 
+    logout(); 
+    window.location.href = '/'; 
+  };
 
   return (
     <nav className="navbar">
@@ -43,7 +46,13 @@ export default function Navbar() {
           {user ? (
             <div className="user-menu">
               <button className="user-avatar-btn" onClick={() => setDropdownOpen(o => !o)}>
-                <div className="user-avatar">{user.name?.[0]?.toUpperCase() || 'U'}</div>
+                <div className="user-avatar">
+                  {user.avatar ? (
+                    <img src={user.avatar} alt={user.name} className="user-avatar-img" />
+                  ) : (
+                    user.name?.[0]?.toUpperCase() || 'U'
+                  )}
+                </div>
                 <span className={`plan-badge ${isPaid ? 'pro' : 'free'}`}>{isPaid ? 'Pro' : 'Free'}</span>
               </button>
               {dropdownOpen && (
@@ -57,6 +66,9 @@ export default function Navbar() {
                       ⚡ Upgrade to Pro
                     </Link>
                   )}
+                  <Link to="/account" className="dropdown-link" onClick={() => setDropdownOpen(false)}>
+                    Account Settings
+                  </Link>
                   <button className="dropdown-logout" onClick={handleLogout}>Sign Out</button>
                 </div>
               )}
