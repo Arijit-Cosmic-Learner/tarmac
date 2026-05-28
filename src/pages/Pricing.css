@@ -68,6 +68,16 @@
   border-color: rgba(239, 68, 68, 0.25);
   color: #f87171;
 }
+.payment-banner--info {
+  background: rgba(163, 230, 53, 0.08);
+  border-color: rgba(163, 230, 53, 0.25);
+  color: var(--lime-400);
+}
+.payment-banner--warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+}
 
 /* Loading spinner for checkout button */
 @keyframes spin {

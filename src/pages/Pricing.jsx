@@ -99,11 +99,15 @@ export default function Pricing() {
         userId: user?.id || '',
       },
       theme: {
-        color: '#a3e635', // Tarmac lime-green
+        color: '#0d0d0d', // Dark background — lime dots remain as Razorpay branding accent
       },
 
       // ── Success Handler ───────────────────────────────────────────────────
       handler: async function (response) {
+        setCheckoutLoading(true);
+        setPaymentStatus('info');
+        setPaymentMessage('Verifying payment signature with bank...');
+
         try {
           const verifyRes = await fetch('/api/verify-payment', {
             method: 'POST',
@@ -118,15 +122,57 @@ export default function Pricing() {
           const verifyData = await verifyRes.json();
           if (!verifyRes.ok) throw new Error(verifyData.error);
 
-          // Upgrade local state immediately
-          await upgradeToPaid();
-          setPaymentStatus('success');
-          setPaymentMessage('🎉 Welcome to Pro! All features are now unlocked.');
+          setPaymentMessage('Signature verified. Activating Pro access...');
+
+          // Start polling backend checking status
+          const maxAttempts = 15; // 30 seconds total (15 attempts * 2 seconds)
+          let attempt = 0;
+
+          const pollInterval = setInterval(async () => {
+            attempt++;
+            try {
+              const checkRes = await fetch(
+                `/api/check-payment-status?userId=${user?.id}&paymentId=${response.razorpay_payment_id}`
+              );
+              const checkData = await checkRes.json();
+
+              if (checkRes.ok && checkData.isPaid) {
+                clearInterval(pollInterval);
+                await upgradeToPaid();
+                setPaymentStatus('success');
+                setPaymentMessage('🎉 Welcome to Pro! All features are now unlocked.');
+                setCheckoutLoading(false);
+              } else if (attempt >= maxAttempts) {
+                clearInterval(pollInterval);
+                setPaymentStatus('warning');
+                setPaymentMessage(
+                  `Payment verified, but activation is taking longer than expected. Please refresh this page or contact support with payment ID: ${response.razorpay_payment_id}`
+                );
+                setCheckoutLoading(false);
+              } else {
+                setPaymentMessage(
+                  `Activating Pro access... (Attempt ${attempt}/${maxAttempts})`
+                );
+              }
+            } catch (err) {
+              console.error('Polling payment status error:', err);
+              if (attempt >= maxAttempts) {
+                clearInterval(pollInterval);
+                setPaymentStatus('warning');
+                setPaymentMessage(
+                  `Payment verified, but checking activation status failed. Please refresh this page or contact support with payment ID: ${response.razorpay_payment_id}`
+                );
+                setCheckoutLoading(false);
+              }
+            }
+          }, 2000);
+
         } catch (err) {
           setPaymentStatus('error');
           setPaymentMessage(
-            `Payment received but verification failed: ${err.message}. Please contact support with payment ID: ${response.razorpay_payment_id}`
+            `Payment verification failed: ${err.message}. Please contact support with payment ID: ${response.razorpay_payment_id}`
           );
+          setCheckoutLoading(false);
         }
       },
 

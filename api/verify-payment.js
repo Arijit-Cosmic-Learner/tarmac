@@ -3,7 +3,6 @@
 // then marks the user as paid in Supabase
 
 import crypto from 'crypto';
-import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -11,11 +10,9 @@ export default async function handler(req, res) {
   }
 
   const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!KEY_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    console.error('Missing env vars');
+  if (!KEY_SECRET) {
+    console.error('Missing RAZORPAY_KEY_SECRET env var');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
@@ -38,28 +35,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Payment verification failed. Signature mismatch.' });
   }
 
-  // ── Step 2: Upgrade user in Supabase ─────────────────────────────────────
-  // Use Service Role Key to bypass Row Level Security
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-  const { error: dbError } = await supabase
-    .from('profiles')
-    .update({
-      is_paid: true,
-      razorpay_payment_id,
-      razorpay_order_id,
-      upgraded_at: new Date().toISOString(),
-    })
-    .eq('id', userId);
-
-  if (dbError) {
-    console.error('Supabase update error:', dbError);
-    return res.status(500).json({ error: 'Payment verified but failed to upgrade account. Contact support.' });
-  }
-
+  // ── Step 2: Return signature verification success ──────────────────────────
+  // We no longer update the Supabase profiles table directly from this client-side 
+  // endpoint to prevent fraud. Only the webhook (or polling fallback checking Razorpay directly)
+  // will perform the DB upgrade.
   return res.status(200).json({
     success: true,
-    message: 'Payment verified and account upgraded to Pro!',
+    message: 'Payment signature verified successfully.',
     payment_id: razorpay_payment_id,
   });
 }
