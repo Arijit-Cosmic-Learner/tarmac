@@ -16,6 +16,17 @@ export default function Account() {
     role: '',
     linkedin: ''
   });
+
+  // Check if form has been edited
+  const isDirty = !!(
+    user && (
+      formData.full_name !== (user.name || '') ||
+      formData.phone !== (user.phone || '') ||
+      formData.company !== (user.company || '') ||
+      formData.role !== (user.role || '') ||
+      formData.linkedin !== (user.linkedin || '')
+    )
+  );
   
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: '' }
@@ -153,7 +164,7 @@ export default function Account() {
                 {isSaving ? 'Saving...' : (
                   <>
                     <Save size={18} />
-                    {hasDetails ? 'Edit Details' : 'Save Changes'}
+                    {isDirty ? 'Save Changes' : (hasDetails ? 'Edit Details' : 'Save Changes')}
                   </>
                 )}
               </button>
