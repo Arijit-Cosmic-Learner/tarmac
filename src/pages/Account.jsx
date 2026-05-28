@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Save, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, Edit2, CheckCircle, AlertCircle } from 'lucide-react';
 import './Account.css';
 
 export default function Account() {
   const { user, updateUserMetadata } = useAuth();
-  
-  // Check if details are already present
-  const hasDetails = !!(user?.phone || user?.company || user?.role || user?.linkedin);
-  
+
   const [formData, setFormData] = useState({
     full_name: '',
     phone: '',
@@ -17,40 +14,54 @@ export default function Account() {
     linkedin: ''
   });
 
-  // Check if form has been edited
-  const isDirty = !!(
-    user && (
-      formData.full_name !== (user.name || '') ||
-      formData.phone !== (user.phone || '') ||
-      formData.company !== (user.company || '') ||
-      formData.role !== (user.role || '') ||
-      formData.linkedin !== (user.linkedin || '')
-    )
-  );
-  
-  const [isSaving, setIsSaving] = useState(false);
-  const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: '' }
+  // Track original values to detect dirty state
+  const originalRef = useRef({});
 
   // Pre-fill form when user object loads
   useEffect(() => {
     if (user) {
-      setFormData({
+      const initial = {
         full_name: user.name || '',
         phone: user.phone || '',
         company: user.company || '',
         role: user.role || '',
         linkedin: user.linkedin || ''
-      });
+      };
+      setFormData(initial);
+      originalRef.current = initial;
     }
-  }, [user]);
+  }, [user?.id]); // Only re-run when user ID changes, not on every render
+
+  // Whether the user has made any changes vs what's saved
+  const isDirty = (
+    formData.full_name !== (originalRef.current.full_name || '') ||
+    formData.phone !== (originalRef.current.phone || '') ||
+    formData.company !== (originalRef.current.company || '') ||
+    formData.role !== (originalRef.current.role || '') ||
+    formData.linkedin !== (originalRef.current.linkedin || '')
+  );
+
+  // Whether the user has any saved details at all
+  const hasSavedDetails = !!(
+    originalRef.current.phone ||
+    originalRef.current.company ||
+    originalRef.current.role ||
+    originalRef.current.linkedin ||
+    originalRef.current.full_name
+  );
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: '' }
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setStatus(null); // Clear status when typing
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    setStatus(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isDirty) return; // Nothing changed, don't submit
+    
     setIsSaving(true);
     setStatus(null);
 
@@ -62,13 +73,32 @@ export default function Account() {
         role: formData.role,
         linkedin: formData.linkedin
       });
-      setStatus({ type: 'success', message: 'Account settings saved successfully!' });
+      // Update the ref so isDirty becomes false
+      originalRef.current = { ...formData };
+      setStatus({ type: 'success', message: 'Account details saved successfully!' });
     } catch (err) {
-      console.error(err);
-      setStatus({ type: 'error', message: err.message || 'Failed to save settings. Please try again.' });
+      console.error('Save error:', err);
+      setStatus({ type: 'error', message: err.message || 'Failed to save. Please try again.' });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Determine button label:
+  // - "Saving..." while in progress
+  // - "Save Changes" when form is dirty (user is editing)
+  // - "Edit Details" when form matches saved data and details exist
+  // - "Save Details" when no details saved yet
+  const getButtonLabel = () => {
+    if (isSaving) return 'Saving...';
+    if (isDirty) return 'Save Changes';
+    if (hasSavedDetails) return 'Edit Details';
+    return 'Save Details';
+  };
+
+  const getButtonIcon = () => {
+    if (isDirty || !hasSavedDetails) return <Save size={18} />;
+    return <Edit2 size={18} />;
   };
 
   return (
@@ -160,11 +190,20 @@ export default function Account() {
             )}
 
             <div className="account-actions">
-              <button type="submit" className="btn-save" disabled={isSaving}>
-                {isSaving ? 'Saving...' : (
+              <button 
+                type="submit" 
+                className={`btn-save ${isDirty ? 'btn-save--dirty' : ''}`}
+                disabled={isSaving || (!isDirty && hasSavedDetails)}
+              >
+                {isSaving ? (
                   <>
-                    <Save size={18} />
-                    {isDirty ? 'Save Changes' : (hasDetails ? 'Edit Details' : 'Save Changes')}
+                    <span className="spinner" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    {getButtonIcon()}
+                    {getButtonLabel()}
                   </>
                 )}
               </button>

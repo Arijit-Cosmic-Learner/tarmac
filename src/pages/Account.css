@@ -100,8 +100,35 @@
 }
 
 .btn-save:disabled {
-  opacity: 0.7;
+  opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
+}
+
+.btn-save--dirty {
+  background: var(--accent, #FF7A00);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(255, 122, 0, 0.4);
+}
+
+.btn-save--dirty:hover:not(:disabled) {
+  background: #ff9533;
+  transform: translateY(-1px);
+}
+
+/* Spinner for saving state */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: #0a0c1b;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .save-status {

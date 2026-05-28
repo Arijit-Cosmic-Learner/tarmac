@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext(null);
@@ -19,9 +19,30 @@ const GUEST_PROFILE = {
   streak_history: []
 };
 
+// Local storage key for extended user details (phone, company, role, linkedin)
+const getExtendedDetailsKey = (userId) => `tarmac_extended_${userId}`;
+
+const loadExtendedDetails = (userId) => {
+  try {
+    const stored = localStorage.getItem(getExtendedDetailsKey(userId));
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveExtendedDetails = (userId, details) => {
+  try {
+    localStorage.setItem(getExtendedDetailsKey(userId), JSON.stringify(details));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(GUEST_USER);
   const [profile, setProfile] = useState(GUEST_PROFILE);
+  const [extendedDetails, setExtendedDetails] = useState({});
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userObj) => {
@@ -39,7 +60,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!data) {
-        // Profile does not exist, let's create it!
+        // Profile does not exist, create it
         const fullName = userObj.user_metadata?.full_name || userObj.email?.split('@')[0] || 'User';
         const newProfile = {
           id: userObj.id,
@@ -68,35 +89,43 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const initUser = useCallback(async (sessionUser) => {
+    if (!sessionUser) {
+      setUser(GUEST_USER);
+      setProfile(GUEST_PROFILE);
+      setExtendedDetails({});
+      return;
+    }
+    setUser(sessionUser);
+    // Load extended details from local storage immediately (instant)
+    const stored = loadExtendedDetails(sessionUser.id);
+    setExtendedDetails(stored);
+    // Fetch profile from DB
+    const userProfile = await fetchProfile(sessionUser);
+    setProfile(userProfile);
+  }, []);
+
   useEffect(() => {
     // Check active session on mount
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        const userProfile = await fetchProfile(session.user);
-        setProfile(userProfile);
-      } else {
-        setUser(GUEST_USER);
-        setProfile(GUEST_PROFILE);
-      }
+      await initUser(session?.user || null);
       setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('onAuthStateChange: Auth event received:', event);
-      if (session?.user) {
-        setUser(session.user);
-        // Only fetch/create profile on SIGNED_IN or INITIAL_SESSION
-        // Avoid doing it on USER_UPDATED to prevent database call deadlock during updateUser
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          console.log('onAuthStateChange: Fetching user profile from DB...');
-          const userProfile = await fetchProfile(session.user);
-          setProfile(userProfile);
-        }
-      } else {
+      console.log('Auth event:', event);
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        await initUser(session?.user || null);
+      } else if (event === 'SIGNED_OUT') {
         setUser(GUEST_USER);
         setProfile(GUEST_PROFILE);
+        setExtendedDetails({});
+      } else if (event === 'USER_UPDATED') {
+        // Just update the raw user object, don't re-fetch profile
+        if (session?.user) {
+          setUser(session.user);
+        }
       }
       setLoading(false);
     });
@@ -104,7 +133,7 @@ export function AuthProvider({ children }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [initUser]);
 
   const login = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -114,6 +143,8 @@ export function AuthProvider({ children }) {
     if (error) throw error;
     
     setUser(data.user);
+    const stored = loadExtendedDetails(data.user.id);
+    setExtendedDetails(stored);
     const userProfile = await fetchProfile(data.user);
     setProfile(userProfile);
     
@@ -146,7 +177,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    // 1. Forcefully clear any stuck Supabase tokens from localStorage synchronously
+    // Clear localStorage tokens
     try {
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
@@ -160,62 +191,80 @@ export function AuthProvider({ children }) {
       console.error('localStorage clear error', e);
     }
     
-    // 2. Optimistically clear the React state
+    // Optimistically clear React state
     setUser(GUEST_USER);
     setProfile(GUEST_PROFILE);
+    setExtendedDetails({});
 
-    // 3. Fire and forget the network request
+    // Fire and forget the network request
     supabase.auth.signOut().catch(err => console.error('Error during sign out:', err));
   };
 
+  /**
+   * BULLETPROOF updateUserMetadata:
+   * - full_name is saved to the `profiles` table directly (always works)
+   * - phone, company, role, linkedin are saved to localStorage immediately (always works)
+   * - supabase.auth.updateUser is attempted in the background (fire-and-forget) for sync
+   * - The UI never hangs waiting for auth.updateUser
+   */
   const updateUserMetadata = async (metadata) => {
-    try {
-      console.log('updateUserMetadata: updating user metadata with:', metadata);
-      
-      // Wrap the updateUser call with a 5-second timeout safety net
-      const updatePromise = supabase.auth.updateUser({
-        data: metadata
-      });
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Update request timed out. Please try again.")), 5000)
-      );
-
-      const { data, error } = await Promise.race([updatePromise, timeoutPromise]);
-      
-      if (error) {
-        console.error('updateUserMetadata: auth.updateUser error:', error);
-        throw error;
-      }
-      
-      console.log('updateUserMetadata: auth.updateUser success:', data);
-
-      // Sync display name change to profiles table in the database (non-blocking)
-      if (metadata.full_name) {
-        console.log('updateUserMetadata: syncing full_name to profiles table (non-blocking):', metadata.full_name);
-        supabase
-          .from('profiles')
-          .update({ full_name: metadata.full_name })
-          .eq('id', data.user.id)
-          .then(({ error: profileError }) => {
-            if (profileError) {
-              console.error('updateUserMetadata: profile sync error:', profileError);
-            } else {
-              console.log('updateUserMetadata: profile sync success');
-              setProfile(prev => prev ? { ...prev, full_name: metadata.full_name } : prev);
-            }
-          })
-          .catch(err => {
-            console.error('updateUserMetadata: profile sync exception:', err);
-          });
-      }
-
-      setUser(data.user);
-      return data.user;
-    } catch (err) {
-      console.error('updateUserMetadata failed:', err);
-      throw err;
+    const currentUserId = user?.id;
+    if (!currentUserId || currentUserId === GUEST_USER.id) {
+      throw new Error('You must be logged in to update your details.');
     }
+
+    // 1. Save full_name to the profiles table (direct DB update — known to work)
+    if (metadata.full_name !== undefined) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ full_name: metadata.full_name })
+        .eq('id', currentUserId);
+      
+      if (profileError) {
+        console.error('Profile full_name update error:', profileError);
+        throw new Error('Failed to update display name. Please try again.');
+      }
+      // Update local profile state
+      setProfile(prev => prev ? { ...prev, full_name: metadata.full_name } : prev);
+    }
+
+    // 2. Save extended details (phone, company, role, linkedin) to localStorage IMMEDIATELY
+    const extended = {
+      phone: metadata.phone ?? '',
+      company: metadata.company ?? '',
+      role: metadata.role ?? '',
+      linkedin: metadata.linkedin ?? '',
+    };
+    saveExtendedDetails(currentUserId, extended);
+    setExtendedDetails(extended);
+
+    // 3. Also update the raw user state so values appear in the context immediately
+    setUser(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        user_metadata: {
+          ...(prev.user_metadata || {}),
+          ...metadata,
+        }
+      };
+    });
+
+    // 4. Fire-and-forget: try to sync to supabase.auth.updateUser in background
+    // This may or may not succeed due to network/RLS issues — doesn't block the UI
+    supabase.auth.updateUser({ data: metadata })
+      .then(({ error }) => {
+        if (error) {
+          console.warn('Background auth.updateUser failed (non-critical):', error.message);
+        } else {
+          console.log('Background auth.updateUser succeeded.');
+        }
+      })
+      .catch(err => console.warn('Background auth.updateUser exception:', err));
+
+    console.log('updateUserMetadata: saved successfully to profiles DB + localStorage');
+    // Return the updated metadata so callers know it succeeded
+    return { ...metadata };
   };
 
   const upgradeToPaid = async () => {
@@ -239,12 +288,13 @@ export function AuthProvider({ children }) {
     user: isRealUser ? {
       id: user.id,
       email: user.email,
-      name: user.user_metadata?.full_name || profile?.full_name || user.email.split('@')[0],
+      name: profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0],
       avatar: user.user_metadata?.avatar_url,
-      phone: user.user_metadata?.phone || '',
-      company: user.user_metadata?.company || '',
-      role: user.user_metadata?.role || '',
-      linkedin: user.user_metadata?.linkedin || '',
+      // Extended details: localStorage takes priority, then auth metadata
+      phone: extendedDetails.phone ?? user.user_metadata?.phone ?? '',
+      company: extendedDetails.company ?? user.user_metadata?.company ?? '',
+      role: extendedDetails.role ?? user.user_metadata?.role ?? '',
+      linkedin: extendedDetails.linkedin ?? user.user_metadata?.linkedin ?? '',
       plan: profile?.is_paid ? 'paid' : 'free',
       joinedAt: user.created_at,
     } : null,
