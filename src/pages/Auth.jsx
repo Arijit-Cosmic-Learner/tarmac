@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import './Auth.css';
 
@@ -144,7 +144,7 @@ export default function Auth() {
                   required autoFocus={tab === 'signup'}
                 />
               </div>
-              <div className="form-group">
+              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                 <label className="form-label">WhatsApp Number</label>
                 <input
                   type="tel" className="form-input" placeholder="+91 98765 43210"
@@ -152,6 +152,9 @@ export default function Auth() {
                   required
                 />
               </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Shield size={12} /> We promise not to spam or disturb you.
+              </p>
             </>
           )}
           <div className="form-group">
@@ -207,7 +210,7 @@ export default function Auth() {
               Please enter your WhatsApp number to secure your account and receive interview alerts.
             </p>
             <form onSubmit={submitPhoneModal}>
-              <div className="form-group">
+              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                 <input
                   type="tel"
                   className="form-input"
@@ -218,6 +221,9 @@ export default function Auth() {
                   required
                 />
               </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Shield size={12} /> We promise not to spam or disturb you.
+              </p>
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                 <button type="button" className="btn-sync" onClick={() => setShowPhoneModal(false)} style={{ flex: 1 }}>
                   Cancel
