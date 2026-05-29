@@ -38,7 +38,10 @@ export default function Admin() {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [linkForm, setLinkForm] = useState({ amount: 499, description: 'Tarmac Pro - Premium Upgrade', notes: '' });
   const [generatingLink, setGeneratingLink] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState(null); // Stores object: { userId, url }
+  const [generatedLink, setGeneratedLink] = useState(null);
+  
+  // Retargeting State
+  const [retargetSegment, setRetargetSegment] = useState('all'); // Stores object: { userId, url }
 
   // Fetch Core Data (Profiles)
   const fetchProfiles = async () => {
@@ -183,6 +186,44 @@ export default function Admin() {
   const totalVisits = profiles.reduce((sum, p) => sum + (p.visits || 0), 0);
   const totalPaymentAttempts = profiles.reduce((sum, p) => sum + (p.payment_attempts || 0), 0);
 
+  // Analytics Tracking Parsing (Funnel)
+  const funnelMetrics = {
+    hero: 0, dashboard: 0, questions: 0, mock: 0, companies: 0, resources: 0, pricing: 0
+  };
+
+  profiles.forEach(p => {
+    let hasHero = false, hasDash = false, hasQ = false, hasMock = false, hasComp = false, hasRes = false, hasPrice = false;
+    (p.journey || []).forEach(e => {
+      if (e.type !== 'page_view') return;
+      const path = e.path || '';
+      if (path === '/') hasHero = true;
+      if (path.includes('/dashboard')) hasDash = true;
+      if (path.includes('/questions')) hasQ = true;
+      if (path.includes('/mock')) hasMock = true;
+      if (path.includes('/companies')) hasComp = true;
+      if (path.includes('/resources')) hasRes = true;
+      if (path.includes('/pricing')) hasPrice = true;
+    });
+
+    if (hasHero) funnelMetrics.hero++;
+    if (hasDash) funnelMetrics.dashboard++;
+    if (hasQ) funnelMetrics.questions++;
+    if (hasMock) funnelMetrics.mock++;
+    if (hasComp) funnelMetrics.companies++;
+    if (hasRes) funnelMetrics.resources++;
+    if (hasPrice) funnelMetrics.pricing++;
+  });
+
+  const funnelChartData = [
+    { name: 'Hero', users: funnelMetrics.hero },
+    { name: 'Dashboard', users: funnelMetrics.dashboard },
+    { name: 'Questions', users: funnelMetrics.questions },
+    { name: 'Mock', users: funnelMetrics.mock },
+    { name: 'Companies', users: funnelMetrics.companies },
+    { name: 'Resources', users: funnelMetrics.resources },
+    { name: 'Pricing', users: funnelMetrics.pricing },
+  ];
+
   // Generate mock chart data based on real profiles
   const chartData = [
     { name: 'Mon', visits: totalVisits > 0 ? Math.floor(totalVisits * 0.1) : 0, signups: 0 },
@@ -293,15 +334,15 @@ export default function Admin() {
         </div>
         
         <div className="chart-container">
-          <h3>New Registrations</h3>
+          <h3>Feature Exploration Funnel</h3>
           <div className="chart-wrapper">
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="name" stroke="#888" />
-                <YAxis stroke="#888" allowDecimals={false} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', borderColor: '#333' }} />
-                <Bar dataKey="signups" name="New Candidates" fill="#ff5c00" radius={[4, 4, 0, 0]} />
+              <BarChart data={funnelChartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
+                <XAxis type="number" stroke="#888" allowDecimals={false} />
+                <YAxis dataKey="name" type="category" stroke="#888" width={80} />
+                <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', borderColor: '#333' }} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
+                <Bar dataKey="users" name="Unique Explorers" fill="var(--lime-500)" radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -561,50 +602,86 @@ export default function Admin() {
   );
 
   const renderRetargeting = () => {
-    const droppedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
-    const otherFreeCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
+    // Determine the filtered candidates based on the selected segment
+    let segmentedCandidates = profiles;
     
+    if (retargetSegment === 'dropped') {
+      segmentedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
+    } else if (retargetSegment === 'free') {
+      segmentedCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
+    } else if (retargetSegment !== 'all') {
+      // Filter by journey path
+      const targetPath = retargetSegment; 
+      segmentedCandidates = profiles.filter(p => {
+        if (p.is_paid) return false; // Usually we only retarget free users
+        let explored = false;
+        (p.journey || []).forEach(e => {
+          if (e.type === 'page_view' && (e.path || '').includes(targetPath)) {
+            explored = true;
+          }
+        });
+        return explored;
+      });
+    }
+
     return (
       <div className="tab-content">
         <div className="tab-header">
           <div>
-            <h2>Retargeting Campaigns</h2>
-            <p>Target dropped checkouts and free users with emails and discounts.</p>
+            <h2>Behavioral Retargeting</h2>
+            <p>Target specific segments based on their exploration behavior.</p>
           </div>
+          <select 
+            className="filter-select" 
+            value={retargetSegment} 
+            onChange={(e) => setRetargetSegment(e.target.value)}
+            style={{ padding: '0.5rem', background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
+          >
+            <option value="all">All Profiles</option>
+            <option value="free">All Free Users</option>
+            <option value="dropped">Dropped at Checkout (High Intent)</option>
+            <option value="/pricing">Viewed Pricing Page</option>
+            <option value="/questions">Explored Question Bank</option>
+            <option value="/mock">Explored Mock Interviews</option>
+            <option value="/companies">Explored Companies</option>
+            <option value="/resources">Explored Resources</option>
+          </select>
         </div>
         
-        {/* Discount Retargeting Section */}
-        <div className="settings-card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--lime-500)' }}>
-          <h3>Discount Retargeting (High Intent)</h3>
-          <p>These candidates clicked "Upgrade" but failed or abandoned checkout.</p>
+        <div className="settings-card" style={{ borderLeft: '4px solid var(--lime-500)' }}>
+          <h3>Target Segment: {segmentedCandidates.length} Users</h3>
+          <p>You can generate custom payment links or email these users directly.</p>
           
           <div className="admin-table-container" style={{overflowX: 'auto', marginTop: '1rem'}}>
             <table className="admin-table">
               <thead>
                 <tr>
                   <th>Candidate</th>
-                  <th>Attempts</th>
+                  <th>Behavior Metrics</th>
                   <th>Contact</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {droppedCandidates.map(u => (
+                {segmentedCandidates.map(u => (
                   <tr key={u.id}>
                     <td>
                       <div style={{fontWeight: 600}}>{u.full_name || 'Anonymous'}</div>
-                      <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>Last active: {u.last_active_date}</div>
+                      <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>Active: {u.last_active_date || 'Unknown'}</div>
                     </td>
-                    <td>{u.payment_attempts} attempts</td>
+                    <td>
+                      <div style={{fontSize: '0.8rem'}}>Visits: {u.visits || 0}</div>
+                      <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Checkouts: {u.payment_attempts || 0}</div>
+                    </td>
                     <td>{u.email || u.phone || 'N/A'}</td>
                     <td>
                       <div style={{display: 'flex', gap: '0.5rem'}}>
                         <button className="btn-generate" onClick={() => openLinkModal(u, 299)}>
-                          Generate 299₹ Link
+                          Generate Link
                         </button>
                         {u.email && (
                           <a 
-                            href={`mailto:${u.email}?subject=Did you forget something? Here's a special discount on Tarmac Pro`} 
+                            href={`mailto:${u.email}?subject=Exclusive Offer for Tarmac Pro`} 
                             className="btn-sync" 
                             style={{textDecoration: 'none', padding: '0.35rem 0.5rem'}}
                           >
@@ -615,57 +692,8 @@ export default function Admin() {
                     </td>
                   </tr>
                 ))}
-                {droppedCandidates.length === 0 && (
-                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No dropped checkouts to retarget.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* General Audience Retargeting */}
-        <div className="settings-card">
-          <h3>General Retargeting (Free Users)</h3>
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            <button 
-              className="btn-sync" 
-              onClick={() => alert('Feature coming soon: Integrated Emailing')}
-              style={{ background: 'var(--surface-3)', color: 'var(--text-primary)' }}
-            >
-              <Mail size={16} /> Broadcast to All Free Users ({otherFreeCandidates.length})
-            </button>
-          </div>
-
-          <h4 style={{marginTop: '2rem', marginBottom: '1rem'}}>Direct Contact Links</h4>
-          <div className="admin-table-container" style={{overflowX: 'auto'}}>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Visits</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {otherFreeCandidates.map(u => (
-                  <tr key={u.id}>
-                    <td>{u.full_name || 'Anonymous'}</td>
-                    <td>{u.email || 'N/A'}</td>
-                    <td>{u.visits}</td>
-                    <td>
-                      {u.email ? (
-                        <a href={`mailto:${u.email}?subject=Exclusive Offer for Tarmac Pro`} className="btn-generate" style={{textDecoration: 'none'}}>
-                          <Mail size={14}/> Send Email
-                        </a>
-                      ) : (
-                        <span style={{color: 'var(--text-muted)'}}>No Email</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {otherFreeCandidates.length === 0 && (
-                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No other free users found.</td></tr>
+                {segmentedCandidates.length === 0 && (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No candidates found in this segment.</td></tr>
                 )}
               </tbody>
             </table>
