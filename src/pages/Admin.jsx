@@ -44,6 +44,11 @@ export default function Admin() {
   // Retargeting State
   const [retargetSegment, setRetargetSegment] = useState('all');
   const [retargetSearchTerm, setRetargetSearchTerm] = useState('');
+  
+  // Email Modal State
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' });
+  
   // Fetch Core Data (Profiles)
   const fetchProfiles = async () => {
     setLoading(true);
@@ -411,64 +416,55 @@ export default function Admin() {
         </div>
       </div>
 
-      <div className="data-list">
-        {filteredProfiles.map((p) => {
-          const isExpanded = expandedUser === p.id;
-          return (
-            <div key={p.id} className={`lead-row-card ${isExpanded ? 'expanded' : ''} ${p.is_paid ? 'pro' : ''}`}>
-              <div className="lead-row-main" onClick={() => setExpandedUser(isExpanded ? null : p.id)}>
-                <div className="lead-identity">
-                  <div className="avatar-circle">{(p.full_name || 'U')[0].toUpperCase()}</div>
-                  <div className="identity-text">
-                    <span className="candidate-name">{p.full_name || 'Anonymous User'}</span>
-                    <span className="candidate-id-sub">{p.id}</span>
+      <div className="admin-table-container" style={{overflowX: 'auto', marginTop: '1rem', borderTop: '1px solid var(--border)'}}>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>User ID</th>
+              <th>Tier</th>
+              <th>Last Click / Section Visited</th>
+              <th>Number</th>
+              <th>View Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredProfiles.map((p) => (
+              <tr key={p.id}>
+                <td>
+                  <div style={{fontWeight: 600}}>{p.full_name || 'Anonymous User'}</div>
+                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>Active: {p.last_active_date || 'Unknown'}</div>
+                </td>
+                <td>
+                  <div className="candidate-id-sub" onClick={() => handleCopy(p.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    {p.id} <Copy size={12} />
                   </div>
-                </div>
-                <div className="lead-highlights">
-                  {p.is_paid ? <span className="badge-status pro">Pro</span> : <span className="badge-status free">Free</span>}
-                  {p.phone && <span className="highlight-pill"><Phone size={12} /> {p.phone}</span>}
-                  <span className="highlight-pill visits">{p.visits} views</span>
-                </div>
-                <ChevronDown size={18} className={`expand-icon ${isExpanded ? 'rotated' : ''}`} />
-              </div>
-              
-              {isExpanded && (
-                <div className="lead-details-pane">
-                  <div className="details-grid">
-                    <div className="details-col">
-                      <h4>Contact & Profile</h4>
-                      <div className="detail-item"><label>Email:</label> <span>{p.email || 'N/A'}</span></div>
-                      <div className="detail-item"><label>Company:</label> <span>{p.company || 'N/A'}</span></div>
-                      <div className="detail-item"><label>Role:</label> <span>{p.role || 'N/A'}</span></div>
-                      <div className="detail-item"><label>Last Active:</label> <span>{p.last_active_date || 'N/A'}</span></div>
-                      {p.linkedin && (
-                        <div className="detail-item">
-                          <label>LinkedIn:</label> 
-                          <a href={p.linkedin} target="_blank" rel="noreferrer" className="linkedin-link">View Profile <ExternalLink size={12} /></a>
-                        </div>
-                      )}
+                </td>
+                <td>
+                  {p.is_paid ? <span className="badge-status pro" style={{padding: '0.2rem 0.5rem', borderRadius: '4px'}}>PRO</span> : <span className="badge-status free" style={{padding: '0.2rem 0.5rem', borderRadius: '4px'}}>FREE</span>}
+                </td>
+                <td>
+                  <span className="highlight-pill" style={{ background: 'var(--surface-3)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+                    <Activity size={12} /> {p.last_visited_label || 'Unknown'}
+                  </span>
+                </td>
+                <td>
+                  {p.phone ? (
+                    <div className="highlight-pill" onClick={() => handleCopy(p.phone)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
+                      <Phone size={12} /> {p.phone} <Copy size={12} />
                     </div>
-                    <div className="details-col journey-col">
-                      <h4>Recent Activity</h4>
-                      {p.journey.length === 0 ? <p className="no-events">No logs.</p> : (
-                        <div className="timeline-events">
-                          {p.journey.slice(-5).map((e, idx) => (
-                            <div key={idx} className="timeline-item">
-                              <div className="timeline-badge" />
-                              <div className="timeline-event-info">
-                                <span className="event-type">{e.type === 'page_view' ? `Viewed: ${e.path}` : e.name}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                  ) : 'N/A'}
+                </td>
+                <td>
+                  <div style={{fontSize: '0.8rem', fontWeight: 600}}>{p.visits || 0} visits</div>
+                </td>
+              </tr>
+            ))}
+            {filteredProfiles.length === 0 && (
+              <tr><td colSpan="6" style={{textAlign: 'center', padding: '2rem'}}>No candidates found.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -673,18 +669,25 @@ export default function Admin() {
       );
     }
 
-    const generateEmailDraft = (u, segment) => {
-      let subject = 'Exclusive Offer for Tarmac Pro';
-      let body = `Hi ${u.full_name || 'there'},\n\nWe noticed you checking out Tarmac.\n\n`;
+    const openEmailModal = (u, segment) => {
+      let subject = '';
+      let body = '';
 
-      if (segment === '/questions') {
-        body = `Hi ${u.full_name || 'there'},\n\nWe saw you exploring the question bank! Did you know the free tier limits you to only 20 questions?\n\nUpgrade to Pro today to unlock unlimited questions and skyrocket your interview prep.\n\n`;
-      } else if (segment === 'dropped') {
-        body = `Hi ${u.full_name || 'there'},\n\nWe noticed you started checking out but didn't complete your upgrade to Tarmac Pro.\n\nIs there anything we can help clarify?\n\n`;
-      } else if (segment === '/mock') {
-        body = `Hi ${u.full_name || 'there'},\n\nWe saw you checking out the mock interviews. AI-driven mock interviews are one of our most powerful features for landing top tier jobs.\n\nUpgrade to Pro to unlock full access.\n\n`;
+      if (segment !== 'all') {
+        subject = 'Exclusive Offer for Tarmac Pro';
+        body = `Hi ${u.full_name || 'there'},\n\nWe noticed you checking out Tarmac.\n\n`;
+
+        if (segment === '/questions') {
+          body = `Hi ${u.full_name || 'there'},\n\nWe saw you exploring the question bank! Did you know the free tier limits you to only 20 questions?\n\nUpgrade to Pro today to unlock unlimited questions and skyrocket your interview prep.\n\n`;
+        } else if (segment === 'dropped') {
+          body = `Hi ${u.full_name || 'there'},\n\nWe noticed you started checking out but didn't complete your upgrade to Tarmac Pro.\n\nIs there anything we can help clarify? Here is a payment link to complete your purchase when you're ready.\n\n`;
+        } else if (segment === '/mock') {
+          body = `Hi ${u.full_name || 'there'},\n\nWe saw you checking out the mock interviews. AI-driven mock interviews are one of our most powerful features for landing top tier jobs.\n\nUpgrade to Pro to unlock full access.\n\n`;
+        }
       }
-      return `mailto:${u.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+      setEmailDraft({ to: u.email || '', subject, body });
+      setShowEmailModal(true);
     };
 
     return (
@@ -774,13 +777,13 @@ export default function Admin() {
                             Manual Razorpay Link
                           </button>
                         )}
-                        <a 
-                          href={generateEmailDraft(u, retargetSegment)} 
+                        <button 
+                          onClick={() => openEmailModal(u, retargetSegment)} 
                           className="btn-sync" 
-                          style={{textDecoration: 'none', padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem'}}
+                          style={{textDecoration: 'none', padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem', border: 'none', cursor: 'pointer', background: 'var(--surface-3)', color: 'var(--text-primary)'}}
                         >
                           <Mail size={12}/> Draft Email
-                        </a>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -914,6 +917,74 @@ export default function Admin() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Email Draft Modal */}
+      {showEmailModal && (
+        <div className="modal-overlay" onClick={() => setShowEmailModal(false)}>
+          <div className="modal-content admin-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Draft Email to Candidate</h3>
+              <button className="close-btn" onClick={() => setShowEmailModal(false)}><X size={20} /></button>
+            </div>
+            
+            <div className="admin-form" style={{ marginTop: '1rem' }}>
+              <div className="form-group">
+                <label>To:</label>
+                <input 
+                  type="text" 
+                  value={emailDraft.to} 
+                  onChange={e => setEmailDraft({...emailDraft, to: e.target.value})}
+                  placeholder="Candidate Email (optional)"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Subject:</label>
+                <input 
+                  type="text" 
+                  value={emailDraft.subject} 
+                  onChange={e => setEmailDraft({...emailDraft, subject: e.target.value})}
+                  placeholder="Email Subject"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Body:</label>
+                <textarea 
+                  value={emailDraft.body} 
+                  onChange={e => setEmailDraft({...emailDraft, body: e.target.value})}
+                  rows={8}
+                  style={{ fontFamily: 'inherit' }}
+                />
+              </div>
+
+              <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={() => {
+                    handleCopy(emailDraft.body);
+                    alert("Email body copied to clipboard!");
+                  }}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Copy size={16} /> Copy Body
+                </button>
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  onClick={() => {
+                    const mailtoStr = `mailto:${emailDraft.to}?subject=${encodeURIComponent(emailDraft.subject)}&body=${encodeURIComponent(emailDraft.body)}`;
+                    window.location.href = mailtoStr;
+                  }}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Mail size={16} /> Open Mail Client
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
