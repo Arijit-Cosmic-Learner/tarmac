@@ -67,11 +67,11 @@ export default function Admin() {
         return {
           ...p,
           parsedHistory: history,
-          // Fallbacks for display
-          phone: history.phone || '',
-          company: history.company || '',
-          role: history.role || '',
-          linkedin: history.linkedin || '',
+          // Fallbacks for display (safeguarded as strings to prevent crash on non-string inputs)
+          phone: history.phone !== undefined && history.phone !== null ? String(history.phone) : '',
+          company: history.company !== undefined && history.company !== null ? String(history.company) : '',
+          role: history.role !== undefined && history.role !== null ? String(history.role) : '',
+          linkedin: history.linkedin !== undefined && history.linkedin !== null ? String(history.linkedin) : '',
           visits: history.visits || (history.journey?.length ? history.journey.length : 0) || 1,
           payment_attempts: history.payment_attempts || 0,
           journey: history.journey || []
