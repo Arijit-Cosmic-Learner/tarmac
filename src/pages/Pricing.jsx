@@ -34,16 +34,130 @@ function loadRazorpayScript() {
   });
 }
 
+// Dynamically load the Easebuzz checkout script
+function loadEasebuzzScript() {
+  return new Promise((resolve) => {
+    if (window.EasebuzzCheckout) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.0/easebuzz-checkout-v2.min.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function Pricing() {
   const { user, isPaid, upgradeToPaid } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(null); // 'success' | 'error' | null
   const [paymentMessage, setPaymentMessage] = useState('');
 
-  // Pre-load Razorpay script on mount for faster checkout
+  // Pre-load payment scripts on mount for faster checkout
   useEffect(() => {
     loadRazorpayScript();
+    loadEasebuzzScript();
   }, []);
+
+  const handleEasebuzzUpgrade = async () => {
+    if (!user) {
+      window.location.href = '/login?tab=signup';
+      return;
+    }
+
+    setCheckoutLoading(true);
+    setPaymentStatus(null);
+    setPaymentMessage('');
+
+    // Track payment attempt event
+    trackEvent('payment_attempt', { step: 'initiated_easebuzz' }, user.id);
+
+    // Step 1: Ensure Easebuzz script is loaded
+    const scriptLoaded = await loadEasebuzzScript();
+    if (!scriptLoaded) {
+      setPaymentStatus('error');
+      setPaymentMessage('Failed to load Easebuzz checkout gateway. Please check your connection and try again.');
+      setCheckoutLoading(false);
+      return;
+    }
+
+    // Step 2: Create order via our secure Vercel backend
+    let sessionData;
+    try {
+      const res = await fetch('/api/easebuzz-create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: '499.00', // ₹499.00
+          userId: user.id,
+          email: user.email,
+          firstname: user.name || user.email.split('@')[0] || 'Candidate',
+          phone: user.phone || '9999999999', // fallback phone required by Easebuzz
+        }),
+      });
+      sessionData = await res.json();
+      if (!res.ok) throw new Error(sessionData.error || 'Could not initiate checkout session');
+    } catch (err) {
+      setPaymentStatus('error');
+      setPaymentMessage(err.message || 'Failed to initiate payment. Please try again.');
+      setCheckoutLoading(false);
+      return;
+    }
+
+    setCheckoutLoading(false);
+
+    // Step 3: Open Easebuzz checkout modal
+    try {
+      const env = sessionData.env === 'prod' ? 'prod' : 'test';
+      const easebuzzCheckout = new window.EasebuzzCheckout(sessionData.key, env);
+
+      const options = {
+        access_key: sessionData.access_key,
+        onResponse: async (response) => {
+          console.log('Easebuzz payment response:', response);
+
+          if (response.status === 'success') {
+            setCheckoutLoading(true);
+            setPaymentStatus('info');
+            setPaymentMessage('Verifying transaction details...');
+
+            try {
+              // Post to verify payment backend
+              const verifyRes = await fetch('/api/easebuzz-verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(response),
+              });
+              const verifyData = await verifyRes.json();
+              
+              if (!verifyRes.ok || !verifyData.success) {
+                throw new Error(verifyData.error || 'Signature verification failed.');
+              }
+
+              // Upgrade success
+              await upgradeToPaid();
+              setPaymentStatus('success');
+              setPaymentMessage('🎉 Welcome to Pro! All features are now unlocked.');
+            } catch (err) {
+              setPaymentStatus('error');
+              setPaymentMessage(`Verification failed: ${err.message || 'Please contact support with Txn ID: ' + response.txnid}`);
+            } finally {
+              setCheckoutLoading(false);
+            }
+          } else {
+            setPaymentStatus('error');
+            setPaymentMessage(`Payment failed or cancelled: ${response.error_Message || 'Please try again.'}`);
+          }
+        },
+        theme: '#FF5C00' // Amber accent
+      };
+
+      easebuzzCheckout.initiatePayment(options);
+    } catch (err) {
+      console.error('Easebuzz SDK runtime error:', err);
+      setPaymentStatus('error');
+      setPaymentMessage('Failed to open the checkout screen. Please try again.');
+    }
+  };
 
   const handleUpgrade = async () => {
     setCheckoutLoading(true);
@@ -51,7 +165,7 @@ export default function Pricing() {
     setPaymentMessage('');
 
     // Track payment attempt event
-    trackEvent('payment_attempt', { step: 'initiated' }, user?.id);
+    trackEvent('payment_attempt', { step: 'initiated_razorpay' }, user?.id);
 
     // Step 1: Ensure Razorpay script is loaded
     const scriptLoaded = await loadRazorpayScript();
@@ -285,7 +399,7 @@ export default function Pricing() {
             ) : (
               <button
                 className="btn-primary pricing-cta pro-cta"
-                onClick={handleUpgrade}
+                onClick={handleEasebuzzUpgrade}
                 disabled={checkoutLoading}
               >
                 {checkoutLoading ? (
