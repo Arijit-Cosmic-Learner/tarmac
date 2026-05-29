@@ -101,35 +101,39 @@ export function AuthProvider({ children }) {
     // Load extended details from local storage immediately (instant)
     const stored = loadExtendedDetails(sessionUser.id);
     
-    // Check if we captured a phone number prior to auth
-    const capturedPhone = localStorage.getItem('tarmac_captured_phone_number');
-    if (capturedPhone && !stored.phone) {
-      stored.phone = capturedPhone;
-      saveExtendedDetails(sessionUser.id, stored);
-      
-      // Attempt to sync this phone number to Supabase profiles (background)
-      supabase.from('profiles').select('streak_history').eq('id', sessionUser.id).maybeSingle()
-        .then(({ data }) => {
-          let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
-          try {
-            if (data?.streak_history) {
-              history = typeof data.streak_history === 'string' ? JSON.parse(data.streak_history) : data.streak_history;
-            }
-          } catch(e) {}
-          
-          history.phone = capturedPhone;
-          return supabase.from('profiles').update({ streak_history: history }).eq('id', sessionUser.id);
-        }).catch(err => console.error('Failed to sync captured phone:', err));
-    }
-    
     setExtendedDetails(stored);
     
     // Sync guest analytics to DB
     syncGuestAnalytics(sessionUser.id);
 
-    // Fetch profile from DB
+    // Fetch profile from DB (creates it if it doesn't exist)
     const userProfile = await fetchProfile(sessionUser);
     setProfile(userProfile);
+
+    // Now that the profile is guaranteed to exist, sync the captured phone number if we have one
+    const capturedPhone = localStorage.getItem('tarmac_captured_phone_number');
+    if (capturedPhone && !stored.phone) {
+      stored.phone = capturedPhone;
+      saveExtendedDetails(sessionUser.id, stored);
+      setExtendedDetails({ ...stored }); // trigger re-render with new phone
+      
+      try {
+        let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
+        if (userProfile?.streak_history) {
+          history = typeof userProfile.streak_history === 'string' 
+            ? JSON.parse(userProfile.streak_history) 
+            : userProfile.streak_history;
+        }
+        
+        history.phone = capturedPhone;
+        await supabase.from('profiles').update({ streak_history: history }).eq('id', sessionUser.id);
+        
+        // Update local profile state
+        setProfile(prev => prev ? { ...prev, streak_history: history } : prev);
+      } catch (err) {
+        console.error('Failed to sync captured phone:', err);
+      }
+    }
   }, []);
 
   useEffect(() => {
