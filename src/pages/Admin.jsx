@@ -5,7 +5,7 @@ import {
   Users, Zap, Shield, Search, Filter, Mail, Download, 
   ChevronRight, ChevronDown, CheckCircle, AlertCircle, 
   ExternalLink, Phone, Briefcase, RefreshCw, BarChart2,
-  CreditCard, Activity, Settings, Link as LinkIcon, Clock, X
+  CreditCard, Activity, Settings, Link as LinkIcon, Clock, X, Copy
 } from 'lucide-react';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, 
@@ -42,8 +42,8 @@ export default function Admin() {
   const [generatedLink, setGeneratedLink] = useState(null);
   
   // Retargeting State
-  const [retargetSegment, setRetargetSegment] = useState('all'); // Stores object: { userId, url }
-
+  const [retargetSegment, setRetargetSegment] = useState('all');
+  const [retargetSearchTerm, setRetargetSearchTerm] = useState('');
   // Fetch Core Data (Profiles)
   const fetchProfiles = async () => {
     setLoading(true);
@@ -72,7 +72,7 @@ export default function Admin() {
           console.error('Failed parsing history for profile', p.id, e);
         }
 
-        return {
+        const mappedP = {
           ...p,
           phone: String(history.phone || ''),
           company: String(history.company || ''),
@@ -81,6 +81,15 @@ export default function Admin() {
           payment_attempts: history.payment_attempts || 0,
           journey: Array.isArray(history.journey) ? history.journey : []
         };
+        
+        let lastVisited = 'Unknown';
+        if (mappedP.journey.length > 0) {
+          const lastE = mappedP.journey[mappedP.journey.length - 1];
+          lastVisited = lastE.type === 'page_view' ? lastE.path : (lastE.name || 'Unknown');
+        }
+        mappedP.last_visited_label = lastVisited;
+        
+        return mappedP;
       });
 
       setProfiles(parsedProfiles);
@@ -199,8 +208,14 @@ export default function Admin() {
   // Metrics for Analytics Tab
   const totalUsers = profiles.length;
   const proUsersCount = profiles.filter(p => p.is_paid).length;
-  const totalVisits = profiles.reduce((sum, p) => sum + (p.visits || 0), 0);
-  const totalPaymentAttempts = profiles.reduce((sum, p) => sum + (p.payment_attempts || 0), 0);
+  const totalVisits = profiles.reduce((acc, p) => acc + (p.visits || 0), 0);
+  const totalPaymentAttempts = profiles.reduce((acc, p) => acc + (p.payment_attempts || 0), 0);
+
+  // Copy helper
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text);
+    // Visual feedback could be added via a toast, but keeping it simple
+  };
 
   // Analytics Tracking Parsing (Funnel)
   const funnelMetrics = {
@@ -649,6 +664,29 @@ export default function Admin() {
       });
     }
 
+    if (retargetSearchTerm) {
+      const term = retargetSearchTerm.toLowerCase();
+      segmentedCandidates = segmentedCandidates.filter(p => 
+        (p.full_name || '').toLowerCase().includes(term) ||
+        (p.phone || '').toLowerCase().includes(term) ||
+        p.id.toLowerCase().includes(term)
+      );
+    }
+
+    const generateEmailDraft = (u, segment) => {
+      let subject = 'Exclusive Offer for Tarmac Pro';
+      let body = `Hi ${u.full_name || 'there'},\n\nWe noticed you checking out Tarmac.\n\n`;
+
+      if (segment === '/questions') {
+        body = `Hi ${u.full_name || 'there'},\n\nWe saw you exploring the question bank! Did you know the free tier limits you to only 20 questions?\n\nUpgrade to Pro today to unlock unlimited questions and skyrocket your interview prep.\n\n`;
+      } else if (segment === 'dropped') {
+        body = `Hi ${u.full_name || 'there'},\n\nWe noticed you started checking out but didn't complete your upgrade to Tarmac Pro.\n\nIs there anything we can help clarify?\n\n`;
+      } else if (segment === '/mock') {
+        body = `Hi ${u.full_name || 'there'},\n\nWe saw you checking out the mock interviews. AI-driven mock interviews are one of our most powerful features for landing top tier jobs.\n\nUpgrade to Pro to unlock full access.\n\n`;
+      }
+      return `mailto:${u.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    };
+
     return (
       <div className="tab-content">
         <div className="tab-header">
@@ -675,8 +713,21 @@ export default function Admin() {
         </div>
         
         <div className="settings-card" style={{ borderLeft: '4px solid var(--lime-500)' }}>
-          <h3>Target Segment: {segmentedCandidates.length} Users</h3>
-          <p>You can generate custom payment links or email these users directly.</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3>Target Segment: {segmentedCandidates.length} Users</h3>
+              <p>You can generate custom payment links or email these users directly.</p>
+            </div>
+            <div className="search-box" style={{ width: '300px', margin: 0 }}>
+              <Search size={18} className="search-icon" />
+              <input 
+                type="text" 
+                placeholder="Search segment by name, phone, or ID..."
+                value={retargetSearchTerm}
+                onChange={(e) => setRetargetSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
           
           <div className="admin-table-container" style={{overflowX: 'auto', marginTop: '1rem'}}>
             <table className="admin-table">
@@ -693,34 +744,43 @@ export default function Admin() {
                   <tr key={u.id}>
                     <td>
                       <div style={{fontWeight: 600}}>{u.full_name || 'Anonymous'}</div>
-                      <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>Active: {u.last_active_date || 'Unknown'}</div>
+                      <div className="candidate-id-sub" onClick={(e) => { e.stopPropagation(); handleCopy(u.id); }} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>{u.id} <Copy size={10} /></div>
                     </td>
                     <td>
                       <div style={{fontSize: '0.8rem'}}>Visits: {u.visits || 0}</div>
                       <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Checkouts: {u.payment_attempts || 0}</div>
                     </td>
-                    <td>{u.email || u.phone || 'N/A'}</td>
                     <td>
-                      <div style={{display: 'flex', gap: '0.5rem'}}>
+                      {u.email && <div>{u.email}</div>}
+                      {u.phone && <div className="highlight-pill" onClick={(e) => { e.stopPropagation(); handleCopy(u.phone); }} style={{ cursor: 'pointer', display: 'inline-flex', marginTop: '4px' }}><Phone size={12} /> {u.phone} <Copy size={10} style={{marginLeft: '4px'}}/></div>}
+                      {!u.email && !u.phone && 'N/A'}
+                    </td>
+                    <td>
+                      <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
                         {!u.is_preauth && (
-                          <button className="btn-generate" onClick={() => openLinkModal(u, 299)}>
-                            Generate Link
-                          </button>
+                          <>
+                            <button className="btn-generate" onClick={() => openLinkModal(u, 499)} style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}>
+                              Generate Link
+                            </button>
+                            <button className="btn-generate" style={{ background: 'var(--lime-500)', color: '#000', padding: '0.35rem 0.6rem', fontSize: '0.75rem' }} onClick={() => openLinkModal(u, 299)}>
+                              ₹299 Discount
+                            </button>
+                          </>
                         )}
                         {u.is_preauth && (
                           <button className="btn-generate" onClick={() => {
                              alert('To generate a link for a pre-auth lead, you must manually create it in Razorpay and send it via WhatsApp to: ' + u.phone);
                           }}>
-                            WhatsApp Number
+                            Manual Razorpay Link
                           </button>
                         )}
                         {u.email && (
                           <a 
-                            href={`mailto:${u.email}?subject=Exclusive Offer for Tarmac Pro`} 
+                            href={generateEmailDraft(u, retargetSegment)} 
                             className="btn-sync" 
-                            style={{textDecoration: 'none', padding: '0.35rem 0.5rem'}}
+                            style={{textDecoration: 'none', padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem'}}
                           >
-                            <Mail size={14}/>
+                            <Mail size={12}/> Draft Email
                           </a>
                         )}
                       </div>
