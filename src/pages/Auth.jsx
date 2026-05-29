@@ -19,6 +19,8 @@ export default function Auth() {
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, signup, loginWithGoogle, isAuthenticated } = useAuth();
+  
+  const isPhoneCaptured = localStorage.getItem('tarmac_phone_captured') === 'true';
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export default function Auth() {
   const captureLead = async (phoneStr, sourceStr) => {
     try {
       await supabase.from('leads').insert([{ phone: phoneStr, source: sourceStr }]);
+      localStorage.setItem('tarmac_phone_captured', 'true');
     } catch (err) {
       console.error('Failed to capture lead:', err);
     }
@@ -42,7 +45,7 @@ export default function Auth() {
   const handleGoogleLogin = async () => {
     setError('');
     setSuccessMsg('');
-    if (!capturePhone) {
+    if (!isPhoneCaptured && !capturePhone) {
       setShowPhoneModal(true);
       return;
     }
@@ -82,10 +85,12 @@ export default function Auth() {
         navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }
-        if (!form.phone.trim()) { setError('Please enter your phone number'); setLoading(false); return; }
+        if (!isPhoneCaptured && !form.phone.trim()) { setError('Please enter your phone number'); setLoading(false); return; }
         
-        // Capture lead before auth
-        await captureLead(form.phone, 'email_signup');
+        // Capture lead before auth if not already captured
+        if (!isPhoneCaptured) {
+          await captureLead(form.phone, 'email_signup');
+        }
         
         const signUpData = await signup(form.email, form.name.trim(), form.password);
         
@@ -93,11 +98,13 @@ export default function Auth() {
           setSuccessMsg('Account created successfully! Please check your inbox for a confirmation link to activate your account.');
         } else {
           // Immediately save phone to user profile using context
-          try {
-            const extendedDetails = JSON.parse(localStorage.getItem(`tarmac_extended_${signUpData.user.id}`) || '{}');
-            extendedDetails.phone = form.phone;
-            localStorage.setItem(`tarmac_extended_${signUpData.user.id}`, JSON.stringify(extendedDetails));
-          } catch(e) {}
+          if (!isPhoneCaptured && form.phone) {
+            try {
+              const extendedDetails = JSON.parse(localStorage.getItem(`tarmac_extended_${signUpData.user.id}`) || '{}');
+              extendedDetails.phone = form.phone;
+              localStorage.setItem(`tarmac_extended_${signUpData.user.id}`, JSON.stringify(extendedDetails));
+            } catch(e) {}
+          }
           navigate('/dashboard');
         }
       }
@@ -144,17 +151,21 @@ export default function Auth() {
                   required autoFocus={tab === 'signup'}
                 />
               </div>
-              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                <label className="form-label">WhatsApp Number</label>
-                <input
-                  type="tel" className="form-input" placeholder="+91 98765 43210"
-                  value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  required
-                />
-              </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <Shield size={12} /> We promise not to spam or disturb you.
-              </p>
+              {!isPhoneCaptured && (
+                <>
+                  <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                    <label className="form-label">WhatsApp Number</label>
+                    <input
+                      type="tel" className="form-input" placeholder="+91 98765 43210"
+                      value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Shield size={12} /> We promise not to spam or disturb you.
+                  </p>
+                </>
+              )}
             </>
           )}
           <div className="form-group">
