@@ -5,7 +5,7 @@ import {
   Users, Zap, Shield, Search, Filter, Mail, Download, 
   ChevronRight, ChevronDown, CheckCircle, AlertCircle, 
   ExternalLink, Phone, Briefcase, RefreshCw, BarChart2,
-  CreditCard, Activity, Settings, Link as LinkIcon, Clock
+  CreditCard, Activity, Settings, Link as LinkIcon, Clock, X
 } from 'lucide-react';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, 
@@ -33,9 +33,12 @@ export default function Admin() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedUser, setExpandedUser] = useState(null);
   
-  // Actions
-  const [generatingLink, setGeneratingLink] = useState(null);
-  const [generatedLink, setGeneratedLink] = useState(null);
+  // Custom Link Modal State
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [linkForm, setLinkForm] = useState({ amount: 499, description: 'Tarmac Pro - Premium Upgrade', notes: '' });
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState(null); // Stores object: { userId, url }
 
   // Fetch Core Data (Profiles)
   const fetchProfiles = async () => {
@@ -118,7 +121,6 @@ export default function Admin() {
     }
   };
 
-  // Initial Load & Tab Switching Logic
   useEffect(() => {
     fetchProfiles();
   }, []);
@@ -128,29 +130,50 @@ export default function Admin() {
     if (activeTab === 'webhooks' && webhooks.length === 0) fetchWebhooks();
   }, [activeTab]);
 
-  // Generate Manual Payment Link
-  const handleGenerateLink = async (candidate) => {
-    setGeneratingLink(candidate.id);
+  // Open Modal for link generation
+  const openLinkModal = (candidate, defaultAmount = 499) => {
+    setSelectedCandidate(candidate);
+    setLinkForm({ amount: defaultAmount, description: 'Tarmac Pro - Premium Upgrade', notes: '' });
+    setShowLinkModal(true);
     setGeneratedLink(null);
+  };
+
+  // Submit custom link payload to Razorpay
+  const submitCustomLink = async (e) => {
+    e.preventDefault();
+    if (!selectedCandidate) return;
+    
+    setGeneratingLink(true);
     try {
+      let notesObj = {};
+      if (linkForm.notes) {
+        try {
+          notesObj = JSON.parse(linkForm.notes);
+        } catch {
+          notesObj = { note: linkForm.notes };
+        }
+      }
+
       const res = await fetch('/api/razorpay-create-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: candidate.id,
-          name: candidate.full_name,
-          email: candidate.email || '', // Email might not be in profile, would need to fetch from auth or ask user
-          phone: candidate.phone,
-          amount: 49900
+          userId: selectedCandidate.id,
+          name: selectedCandidate.full_name,
+          email: selectedCandidate.email || '',
+          phone: selectedCandidate.phone,
+          amount: Math.round(Number(linkForm.amount) * 100), // convert to paise
+          description: linkForm.description,
+          notes: notesObj
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setGeneratedLink({ userId: candidate.id, url: data.short_url });
+      setGeneratedLink({ userId: selectedCandidate.id, url: data.short_url });
     } catch (err) {
       alert('Failed to generate link: ' + err.message);
     } finally {
-      setGeneratingLink(null);
+      setGeneratingLink(false);
     }
   };
 
@@ -171,7 +194,6 @@ export default function Admin() {
     { name: 'Sun', visits: totalVisits > 0 ? Math.floor(totalVisits * 0.15) : 0, signups: totalUsers > 3 ? totalUsers - 3 : totalUsers },
   ];
 
-  // Candidates Filtering
   const filteredProfiles = profiles.filter(p => {
     const searchMatch = (p.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                         (p.phone || '').includes(searchTerm);
@@ -181,7 +203,6 @@ export default function Admin() {
     return searchMatch && statusMatch;
   });
 
-  // Render Sidebar
   const renderSidebar = () => (
     <div className="admin-sidebar">
       <div className="sidebar-header">
@@ -211,7 +232,6 @@ export default function Admin() {
     </div>
   );
 
-  // Render Analytics Tab
   const renderAnalytics = () => (
     <div className="tab-content">
       <div className="tab-header">
@@ -290,7 +310,6 @@ export default function Admin() {
     </div>
   );
 
-  // Render Candidates Tab
   const renderCandidates = () => (
     <div className="tab-content">
       <div className="tab-header">
@@ -348,6 +367,7 @@ export default function Admin() {
                   <div className="details-grid">
                     <div className="details-col">
                       <h4>Contact & Profile</h4>
+                      <div className="detail-item"><label>Email:</label> <span>{p.email || 'N/A'}</span></div>
                       <div className="detail-item"><label>Company:</label> <span>{p.company || 'N/A'}</span></div>
                       <div className="detail-item"><label>Role:</label> <span>{p.role || 'N/A'}</span></div>
                       <div className="detail-item"><label>Last Active:</label> <span>{p.last_active_date || 'N/A'}</span></div>
@@ -383,11 +403,8 @@ export default function Admin() {
     </div>
   );
 
-  // Render Payments Tab
   const renderPayments = () => {
-    // Candidates who attempted payment but are not pro
     const droppedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
-    // All other free candidates
     const otherFreeCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
 
     const renderCandidateRow = (c) => (
@@ -397,21 +414,12 @@ export default function Admin() {
           <span>{c.payment_attempts} attempts • Last active: {c.last_active_date}</span>
           {c.phone && <span>Phone: {c.phone}</span>}
         </div>
-        
-        {generatedLink?.userId === c.id ? (
-          <div className="link-result">
-            <input type="text" readOnly value={generatedLink.url} onClick={(e) => e.target.select()} />
-            <span className="success-text"><CheckCircle size={14}/> Ready to copy</span>
-          </div>
-        ) : (
-          <button 
-            className="btn-generate" 
-            onClick={() => handleGenerateLink(c)}
-            disabled={generatingLink === c.id}
-          >
-            {generatingLink === c.id ? 'Generating...' : <><LinkIcon size={14} /> Generate Link</>}
-          </button>
-        )}
+        <button 
+          className="btn-generate" 
+          onClick={() => openLinkModal(c, 499)}
+        >
+          <LinkIcon size={14} /> Custom Link
+        </button>
       </div>
     );
 
@@ -428,12 +436,10 @@ export default function Admin() {
         </div>
 
         <div className="payments-layout">
-          {/* Left Column: Link Generation */}
           <div className="link-generation-sections">
             <div className="recovery-section">
               <h3>Needs Manual Recovery</h3>
               <p className="section-desc">Candidates who clicked checkout but didn't pay.</p>
-              
               {droppedCandidates.length === 0 ? (
                 <div className="empty-state" style={{padding: '1.5rem'}}>No dropped checkouts found.</div>
               ) : (
@@ -446,7 +452,6 @@ export default function Admin() {
             <div className="recovery-section" style={{marginTop: '1.5rem'}}>
               <h3>All Other Free Users</h3>
               <p className="section-desc">Generate links proactively for anyone.</p>
-              
               {otherFreeCandidates.length === 0 ? (
                 <div className="empty-state" style={{padding: '1.5rem'}}>No other free candidates.</div>
               ) : (
@@ -457,7 +462,6 @@ export default function Admin() {
             </div>
           </div>
 
-          {/* Right Column: Recent Transactions from Razorpay */}
           <div className="transactions-section">
             <h3>Recent Razorpay Transactions</h3>
             {loadingPayments ? (
@@ -488,7 +492,6 @@ export default function Admin() {
     );
   };
 
-  // Render Webhooks Tab
   const renderWebhooks = () => (
     <div className="tab-content">
       <div className="tab-header">
@@ -542,28 +545,79 @@ export default function Admin() {
     </div>
   );
 
-  // Render Retargeting Tab
   const renderRetargeting = () => {
-    const freeUsers = profiles.filter(p => !p.is_paid);
+    const droppedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
+    const otherFreeCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
     
     return (
       <div className="tab-content">
         <div className="tab-header">
           <div>
-            <h2>Email Retargeting</h2>
-            <p>Send manual email campaigns to free users.</p>
+            <h2>Retargeting Campaigns</h2>
+            <p>Target dropped checkouts and free users with emails and discounts.</p>
           </div>
         </div>
         
+        {/* Discount Retargeting Section */}
+        <div className="settings-card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--lime-500)' }}>
+          <h3>Discount Retargeting (High Intent)</h3>
+          <p>These candidates clicked "Upgrade" but failed or abandoned checkout.</p>
+          
+          <div className="admin-table-container" style={{overflowX: 'auto', marginTop: '1rem'}}>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Attempts</th>
+                  <th>Contact</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {droppedCandidates.map(u => (
+                  <tr key={u.id}>
+                    <td>
+                      <div style={{fontWeight: 600}}>{u.full_name || 'Anonymous'}</div>
+                      <div style={{fontSize: '0.7rem', color: 'var(--text-muted)'}}>Last active: {u.last_active_date}</div>
+                    </td>
+                    <td>{u.payment_attempts} attempts</td>
+                    <td>{u.email || u.phone || 'N/A'}</td>
+                    <td>
+                      <div style={{display: 'flex', gap: '0.5rem'}}>
+                        <button className="btn-generate" onClick={() => openLinkModal(u, 299)}>
+                          Generate 299₹ Link
+                        </button>
+                        {u.email && (
+                          <a 
+                            href={`mailto:${u.email}?subject=Did you forget something? Here's a special discount on Tarmac Pro`} 
+                            className="btn-sync" 
+                            style={{textDecoration: 'none', padding: '0.35rem 0.5rem'}}
+                          >
+                            <Mail size={14}/>
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {droppedCandidates.length === 0 && (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No dropped checkouts to retarget.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* General Audience Retargeting */}
         <div className="settings-card">
-          <h3>Campaign Actions</h3>
+          <h3>General Retargeting (Free Users)</h3>
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
             <button 
               className="btn-sync" 
               onClick={() => alert('Feature coming soon: Integrated Emailing')}
-              style={{ background: 'var(--lime-500)', color: '#000', borderColor: 'var(--lime-500)' }}
+              style={{ background: 'var(--surface-3)', color: 'var(--text-primary)' }}
             >
-              <Mail size={16} /> Broadcast to All ({freeUsers.length})
+              <Mail size={16} /> Broadcast to All Free Users ({otherFreeCandidates.length})
             </button>
           </div>
 
@@ -579,7 +633,7 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {freeUsers.map(u => (
+                {otherFreeCandidates.map(u => (
                   <tr key={u.id}>
                     <td>{u.full_name || 'Anonymous'}</td>
                     <td>{u.email || 'N/A'}</td>
@@ -595,8 +649,8 @@ export default function Admin() {
                     </td>
                   </tr>
                 ))}
-                {freeUsers.length === 0 && (
-                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No free users found.</td></tr>
+                {otherFreeCandidates.length === 0 && (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No other free users found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -606,7 +660,6 @@ export default function Admin() {
     );
   };
 
-  // Render Settings Tab
   const renderSettings = () => (
     <div className="tab-content">
       <div className="tab-header">
@@ -657,6 +710,77 @@ export default function Admin() {
         {activeTab === 'webhooks' && renderWebhooks()}
         {activeTab === 'settings' && renderSettings()}
       </div>
+
+      {/* Custom Payment Link Modal */}
+      {showLinkModal && selectedCandidate && (
+        <div className="modal-overlay" onClick={() => !generatingLink && setShowLinkModal(false)}>
+          <div className="modal-content admin-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Create Custom Payment Link</h3>
+              <button className="close-btn" onClick={() => setShowLinkModal(false)}><X size={20} /></button>
+            </div>
+            
+            {!generatedLink ? (
+              <form onSubmit={submitCustomLink} className="admin-form">
+                <div className="form-group">
+                  <label>Candidate</label>
+                  <input type="text" value={selectedCandidate.full_name || selectedCandidate.phone} disabled />
+                </div>
+                
+                <div className="form-group">
+                  <label>Amount (₹)</label>
+                  <input 
+                    type="number" 
+                    value={linkForm.amount} 
+                    onChange={e => setLinkForm({...linkForm, amount: e.target.value})}
+                    required 
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>Description</label>
+                  <input 
+                    type="text" 
+                    value={linkForm.description} 
+                    onChange={e => setLinkForm({...linkForm, description: e.target.value})}
+                    placeholder="e.g. Tarmac Pro Discounted"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Internal Notes (JSON or Text)</label>
+                  <textarea 
+                    value={linkForm.notes} 
+                    onChange={e => setLinkForm({...linkForm, notes: e.target.value})}
+                    placeholder='e.g. {"discount": "70%"}'
+                    rows={2}
+                  />
+                </div>
+
+                <div className="modal-actions">
+                  <button type="button" className="btn-secondary" onClick={() => setShowLinkModal(false)}>Cancel</button>
+                  <button type="submit" className="btn-primary" disabled={generatingLink}>
+                    {generatingLink ? 'Creating...' : 'Create Link'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="success-state">
+                <CheckCircle size={48} color="var(--lime-500)" style={{margin: '0 auto 1rem'}} />
+                <h4>Link Created Successfully!</h4>
+                <div className="link-result-box">
+                  <input type="text" value={generatedLink.url} readOnly onClick={e => e.target.select()} />
+                  <p>Share this URL with the candidate.</p>
+                </div>
+                <button className="btn-primary" style={{width: '100%', marginTop: '1rem'}} onClick={() => setShowLinkModal(false)}>
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

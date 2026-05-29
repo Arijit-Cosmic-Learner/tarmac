@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Razorpay credentials not configured' });
   }
 
-  const { userId, name, email, phone, amount = 49900 } = req.body;
+  const { userId, name, email, phone, amount = 49900, description, notes } = req.body;
 
   if (!userId) {
     return res.status(400).json({ error: 'Missing userId parameter' });
@@ -26,12 +26,12 @@ export default async function handler(req, res) {
     const expireBy = Math.floor(Date.now() / 1000) + 259200; 
 
     const payload = {
-      amount, // default 499 INR in paise
+      amount, // in paise
       currency: "INR",
       accept_partial: false,
       expire_by: expireBy,
       reference_id: `link_${userId.substring(0, 10)}_${Date.now().toString().slice(-6)}`,
-      description: "Tarmac Pro - Interview Prep Upgrade",
+      description: description || "Tarmac Pro - Premium Upgrade",
       customer: {
         name: name || "Tarmac Candidate",
         contact: phone || "",
@@ -44,7 +44,8 @@ export default async function handler(req, res) {
       reminder_enable: true,
       notes: {
         userId: userId,
-        purpose: "manual_upgrade"
+        purpose: "manual_upgrade",
+        ...notes
       }
     };
 
