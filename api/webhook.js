@@ -65,6 +65,28 @@ export default async function handler(req, res) {
     console.log(`Razorpay webhook verified: event = ${eventData.event}`);
     console.log('Webhook Payload:', JSON.stringify(eventData, null, 2));
 
+    // Initialize privileged Supabase client to bypass Row Level Security
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+    const paymentEntity = eventData.payload?.payment?.entity;
+    const userId = paymentEntity?.notes?.userId;
+    const paymentId = paymentEntity?.id;
+    const orderId = paymentEntity?.order_id;
+
+    // Log the event to our new webhook_events table
+    try {
+      await supabase.from('webhook_events').insert({
+        event_type: eventData.event,
+        payment_id: paymentId || null,
+        order_id: orderId || null,
+        user_id: userId || null,
+        payload: eventData,
+        status: 'received'
+      });
+    } catch (err) {
+      console.error('Failed to log webhook event to DB:', err);
+    }
+
     // We specifically care about payment.captured
     if (eventData.event === 'payment.captured') {
       const paymentEntity = eventData.payload?.payment?.entity;
@@ -78,9 +100,6 @@ export default async function handler(req, res) {
       }
 
       console.log(`Upgrading user ${userId} to Pro via webhook. Payment ID: ${paymentId}, Order ID: ${orderId}`);
-
-      // Initialize privileged Supabase client to bypass Row Level Security
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
       const { error: dbError } = await supabase
         .from('profiles')
