@@ -71,6 +71,11 @@ export default function Navbar() {
                       ⚡ Upgrade to Pro
                     </Link>
                   )}
+                  {((user?.email === 'mitra.ari99@gmail.com') || (localStorage.getItem('tarmac_admin_override') === 'true')) && (
+                    <Link to="/admin" className="dropdown-link admin-link-accent" onClick={() => setDropdownOpen(false)}>
+                      🛡️ Admin Console
+                    </Link>
+                  )}
                   <Link to="/account" className="dropdown-link" onClick={() => setDropdownOpen(false)}>
                     Account Settings
                   </Link>

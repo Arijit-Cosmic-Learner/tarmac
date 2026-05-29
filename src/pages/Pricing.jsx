@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Check, Zap, Loader } from 'lucide-react';
+import { trackEvent } from '../lib/analytics';
 import './Pricing.css';
 
 const FREE_FEATURES = [
@@ -48,6 +49,9 @@ export default function Pricing() {
     setCheckoutLoading(true);
     setPaymentStatus(null);
     setPaymentMessage('');
+
+    // Track payment attempt event
+    trackEvent('payment_attempt', { step: 'initiated' }, user?.id);
 
     // Step 1: Ensure Razorpay script is loaded
     const scriptLoaded = await loadRazorpayScript();

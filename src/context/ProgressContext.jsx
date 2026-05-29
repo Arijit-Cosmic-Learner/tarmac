@@ -69,7 +69,7 @@ export function ProgressProvider({ children }) {
           setStreak({
             current: profileData.streak_count || 0,
             lastPracticed: profileData.last_active_date || null,
-            history: Array.isArray(history) ? history : [],
+            history: Array.isArray(history) ? history : (history?.dates || []),
           });
         }
       } catch (err) {
@@ -139,13 +139,35 @@ export function ProgressProvider({ children }) {
 
         setStreak(newStreak);
 
-        // 3. Sync streak to profiles table
+        // 3. Sync streak to profiles table while preserving existing tracking object properties
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('streak_history')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        let updatedHistoryObj = { dates: newStreak.history, visits: 0, journey: [], payment_attempts: 0 };
+        if (profile?.streak_history) {
+          const raw = typeof profile.streak_history === 'string'
+            ? JSON.parse(profile.streak_history)
+            : profile.streak_history;
+          
+          if (Array.isArray(raw)) {
+            updatedHistoryObj.dates = newStreak.history;
+          } else if (raw && typeof raw === 'object') {
+            updatedHistoryObj = {
+              ...raw,
+              dates: newStreak.history
+            };
+          }
+        }
+
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
             streak_count: newStreak.current,
             last_active_date: newStreak.lastPracticed,
-            streak_history: newStreak.history
+            streak_history: updatedHistoryObj
           })
           .eq('id', user.id);
 

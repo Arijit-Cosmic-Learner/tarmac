@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { syncGuestAnalytics, trackEvent } from '../lib/analytics';
 
 const AuthContext = createContext(null);
 
@@ -100,6 +101,10 @@ export function AuthProvider({ children }) {
     // Load extended details from local storage immediately (instant)
     const stored = loadExtendedDetails(sessionUser.id);
     setExtendedDetails(stored);
+    
+    // Sync guest analytics to DB
+    syncGuestAnalytics(sessionUser.id);
+
     // Fetch profile from DB
     const userProfile = await fetchProfile(sessionUser);
     setProfile(userProfile);
@@ -213,22 +218,56 @@ export function AuthProvider({ children }) {
       throw new Error('You must be logged in to update your details.');
     }
 
-    // 1. Save full_name to the profiles table (direct DB update — known to work)
-    if (metadata.full_name !== undefined) {
-      const { error: profileError } = await supabase
+    // 1. Save full_name and extended details to the profiles table
+    let updatedHistoryObj = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
+    try {
+      const { data: profile } = await supabase
         .from('profiles')
-        .update({ full_name: metadata.full_name })
-        .eq('id', currentUserId);
-      
-      if (profileError) {
-        console.error('Profile full_name update error:', profileError);
-        throw new Error('Failed to update display name. Please try again.');
+        .select('streak_history')
+        .eq('id', currentUserId)
+        .maybeSingle();
+
+      if (profile?.streak_history) {
+        const raw = typeof profile.streak_history === 'string'
+          ? JSON.parse(profile.streak_history)
+          : profile.streak_history;
+        
+        if (Array.isArray(raw)) {
+          updatedHistoryObj.dates = raw;
+        } else if (raw && typeof raw === 'object') {
+          updatedHistoryObj = { ...raw };
+        }
       }
-      // Update local profile state
+    } catch (err) {
+      console.warn('Failed to retrieve current profiles history for metadata update:', err);
+    }
+
+    // Merge properties
+    updatedHistoryObj.phone = metadata.phone ?? updatedHistoryObj.phone ?? '';
+    updatedHistoryObj.company = metadata.company ?? updatedHistoryObj.company ?? '';
+    updatedHistoryObj.role = metadata.role ?? updatedHistoryObj.role ?? '';
+    updatedHistoryObj.linkedin = metadata.linkedin ?? updatedHistoryObj.linkedin ?? '';
+
+    const profileUpdates = { streak_history: updatedHistoryObj };
+    if (metadata.full_name !== undefined) {
+      profileUpdates.full_name = metadata.full_name;
+    }
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update(profileUpdates)
+      .eq('id', currentUserId);
+    
+    if (profileError) {
+      console.error('Profile update error:', profileError);
+      throw new Error('Failed to update details in profile. Please try again.');
+    }
+
+    if (metadata.full_name !== undefined) {
       setProfile(prev => prev ? { ...prev, full_name: metadata.full_name } : prev);
     }
 
-    // 2. Save extended details (phone, company, role, linkedin) to localStorage IMMEDIATELY
+    // 2. Save extended details (phone, company, role, linkedin) to localStorage IMMEDIATELY (local fallback cache)
     const extended = {
       phone: metadata.phone ?? '',
       company: metadata.company ?? '',
@@ -250,8 +289,12 @@ export function AuthProvider({ children }) {
       };
     });
 
-    // 4. Fire-and-forget: try to sync to supabase.auth.updateUser in background
-    // This may or may not succeed due to network/RLS issues — doesn't block the UI
+    // Log event if phone was documented
+    if (metadata.phone) {
+      trackEvent('phone_documented', { phone: metadata.phone }, currentUserId);
+    }
+
+    // 4. Fire-and-forget: try to sync to supabase.auth.updateUser in background (non-critical)
     supabase.auth.updateUser({ data: metadata })
       .then(({ error }) => {
         if (error) {
@@ -263,7 +306,6 @@ export function AuthProvider({ children }) {
       .catch(err => console.warn('Background auth.updateUser exception:', err));
 
     console.log('updateUserMetadata: saved successfully to profiles DB + localStorage');
-    // Return the updated metadata so callers know it succeeded
     return { ...metadata };
   };
 

@@ -201,6 +201,14 @@
 }
 .dropdown-link:hover { color: var(--text-primary); background: var(--surface-2); }
 
+.admin-link-accent {
+  color: var(--lime-500) !important;
+  font-weight: 600;
+}
+.admin-link-accent:hover {
+  background: rgba(255, 92, 0, 0.08) !important;
+}
+
 .dropdown-logout {
   display: block;
   width: 100%;
