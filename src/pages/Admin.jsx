@@ -774,15 +774,13 @@ export default function Admin() {
                             Manual Razorpay Link
                           </button>
                         )}
-                        {u.email && (
-                          <a 
-                            href={generateEmailDraft(u, retargetSegment)} 
-                            className="btn-sync" 
-                            style={{textDecoration: 'none', padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem'}}
-                          >
-                            <Mail size={12}/> Draft Email
-                          </a>
-                        )}
+                        <a 
+                          href={generateEmailDraft(u, retargetSegment)} 
+                          className="btn-sync" 
+                          style={{textDecoration: 'none', padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem'}}
+                        >
+                          <Mail size={12}/> Draft Email
+                        </a>
                       </div>
                     </td>
                   </tr>
