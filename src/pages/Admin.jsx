@@ -333,18 +333,16 @@ export default function Admin() {
           </div>
         </div>
         
-        <div className="chart-container">
-          <h3>Feature Exploration Funnel</h3>
-          <div className="chart-wrapper">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={funnelChartData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
-                <XAxis type="number" stroke="#888" allowDecimals={false} />
-                <YAxis dataKey="name" type="category" stroke="#888" width={80} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', borderColor: '#333' }} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                <Bar dataKey="users" name="Unique Explorers" fill="var(--lime-500)" radius={[0, 4, 4, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="chart-container" style={{ background: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}>
+          <h3 style={{ marginBottom: '1rem' }}>Feature Exploration Funnel</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
+            {funnelChartData.map(item => (
+              <div key={item.name} className="stat-card" style={{ padding: '1.25rem', flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{item.name}</span>
+                <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{item.users}</span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--lime-500)', fontWeight: 600 }}>UNIQUE EXPLORERS</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
