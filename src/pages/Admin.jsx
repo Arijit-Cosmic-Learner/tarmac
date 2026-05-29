@@ -198,6 +198,9 @@ export default function Admin() {
         <button className={`nav-btn ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>
           <CreditCard size={18} /> Payment Links
         </button>
+        <button className={`nav-btn ${activeTab === 'retargeting' ? 'active' : ''}`} onClick={() => setActiveTab('retargeting')}>
+          <Mail size={18} /> Retargeting
+        </button>
         <button className={`nav-btn ${activeTab === 'webhooks' ? 'active' : ''}`} onClick={() => setActiveTab('webhooks')}>
           <Activity size={18} /> Webhook Logs
         </button>
@@ -384,6 +387,33 @@ export default function Admin() {
   const renderPayments = () => {
     // Candidates who attempted payment but are not pro
     const droppedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
+    // All other free candidates
+    const otherFreeCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
+
+    const renderCandidateRow = (c) => (
+      <div key={c.id} className="recovery-card">
+        <div className="recovery-info">
+          <strong>{c.full_name || 'Anonymous'}</strong>
+          <span>{c.payment_attempts} attempts • Last active: {c.last_active_date}</span>
+          {c.phone && <span>Phone: {c.phone}</span>}
+        </div>
+        
+        {generatedLink?.userId === c.id ? (
+          <div className="link-result">
+            <input type="text" readOnly value={generatedLink.url} onClick={(e) => e.target.select()} />
+            <span className="success-text"><CheckCircle size={14}/> Ready to copy</span>
+          </div>
+        ) : (
+          <button 
+            className="btn-generate" 
+            onClick={() => handleGenerateLink(c)}
+            disabled={generatingLink === c.id}
+          >
+            {generatingLink === c.id ? 'Generating...' : <><LinkIcon size={14} /> Generate Link</>}
+          </button>
+        )}
+      </div>
+    );
 
     return (
       <div className="tab-content">
@@ -398,41 +428,33 @@ export default function Admin() {
         </div>
 
         <div className="payments-layout">
-          {/* Left Column: Dropped Checkouts for Recovery */}
-          <div className="recovery-section">
-            <h3>Needs Manual Recovery</h3>
-            <p className="section-desc">Candidates who clicked checkout but didn't pay.</p>
-            
-            {droppedCandidates.length === 0 ? (
-              <div className="empty-state">No dropped checkouts found.</div>
-            ) : (
-              <div className="recovery-list">
-                {droppedCandidates.map(c => (
-                  <div key={c.id} className="recovery-card">
-                    <div className="recovery-info">
-                      <strong>{c.full_name || 'Anonymous'}</strong>
-                      <span>{c.payment_attempts} attempts • Last active: {c.last_active_date}</span>
-                      {c.phone && <span>Phone: {c.phone}</span>}
-                    </div>
-                    
-                    {generatedLink?.userId === c.id ? (
-                      <div className="link-result">
-                        <input type="text" readOnly value={generatedLink.url} onClick={(e) => e.target.select()} />
-                        <span className="success-text"><CheckCircle size={14}/> Ready to copy</span>
-                      </div>
-                    ) : (
-                      <button 
-                        className="btn-generate" 
-                        onClick={() => handleGenerateLink(c)}
-                        disabled={generatingLink === c.id}
-                      >
-                        {generatingLink === c.id ? 'Generating...' : <><LinkIcon size={14} /> Generate Link</>}
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* Left Column: Link Generation */}
+          <div className="link-generation-sections">
+            <div className="recovery-section">
+              <h3>Needs Manual Recovery</h3>
+              <p className="section-desc">Candidates who clicked checkout but didn't pay.</p>
+              
+              {droppedCandidates.length === 0 ? (
+                <div className="empty-state" style={{padding: '1.5rem'}}>No dropped checkouts found.</div>
+              ) : (
+                <div className="recovery-list">
+                  {droppedCandidates.map(renderCandidateRow)}
+                </div>
+              )}
+            </div>
+
+            <div className="recovery-section" style={{marginTop: '1.5rem'}}>
+              <h3>All Other Free Users</h3>
+              <p className="section-desc">Generate links proactively for anyone.</p>
+              
+              {otherFreeCandidates.length === 0 ? (
+                <div className="empty-state" style={{padding: '1.5rem'}}>No other free candidates.</div>
+              ) : (
+                <div className="recovery-list">
+                  {otherFreeCandidates.map(renderCandidateRow)}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right Column: Recent Transactions from Razorpay */}
@@ -520,6 +542,70 @@ export default function Admin() {
     </div>
   );
 
+  // Render Retargeting Tab
+  const renderRetargeting = () => {
+    const freeUsers = profiles.filter(p => !p.is_paid);
+    
+    return (
+      <div className="tab-content">
+        <div className="tab-header">
+          <div>
+            <h2>Email Retargeting</h2>
+            <p>Send manual email campaigns to free users.</p>
+          </div>
+        </div>
+        
+        <div className="settings-card">
+          <h3>Campaign Actions</h3>
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+            <button 
+              className="btn-sync" 
+              onClick={() => alert('Feature coming soon: Integrated Emailing')}
+              style={{ background: 'var(--lime-500)', color: '#000', borderColor: 'var(--lime-500)' }}
+            >
+              <Mail size={16} /> Broadcast to All ({freeUsers.length})
+            </button>
+          </div>
+
+          <h4 style={{marginTop: '2rem', marginBottom: '1rem'}}>Direct Contact Links</h4>
+          <div className="admin-table-container" style={{overflowX: 'auto'}}>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Visits</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {freeUsers.map(u => (
+                  <tr key={u.id}>
+                    <td>{u.full_name || 'Anonymous'}</td>
+                    <td>{u.email || 'N/A'}</td>
+                    <td>{u.visits}</td>
+                    <td>
+                      {u.email ? (
+                        <a href={`mailto:${u.email}?subject=Exclusive Offer for Tarmac Pro`} className="btn-generate" style={{textDecoration: 'none'}}>
+                          <Mail size={14}/> Send Email
+                        </a>
+                      ) : (
+                        <span style={{color: 'var(--text-muted)'}}>No Email</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {freeUsers.length === 0 && (
+                  <tr><td colSpan="4" style={{textAlign: 'center', padding: '2rem'}}>No free users found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Render Settings Tab
   const renderSettings = () => (
     <div className="tab-content">
@@ -567,6 +653,7 @@ export default function Admin() {
         {activeTab === 'analytics' && renderAnalytics()}
         {activeTab === 'candidates' && renderCandidates()}
         {activeTab === 'payments' && renderPayments()}
+        {activeTab === 'retargeting' && renderRetargeting()}
         {activeTab === 'webhooks' && renderWebhooks()}
         {activeTab === 'settings' && renderSettings()}
       </div>
