@@ -218,46 +218,73 @@ export function AuthProvider({ children }) {
       throw new Error('You must be logged in to update your details.');
     }
 
-    // 1. Save full_name and extended details to the profiles table
-    let updatedHistoryObj = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
+    // 1. Read the existing streak_history from the DB and safely parse it
+    //    regardless of what shape it is (null, {}, [], proper object, string)
+    let updatedHistoryObj = {
+      dates: [],
+      visits: 0,
+      journey: [],
+      payment_attempts: 0,
+      phone: '',
+      company: '',
+      role: '',
+      linkedin: '',
+    };
+
     try {
-      const { data: profile } = await supabase
+      const { data: existingProfile } = await supabase
         .from('profiles')
         .select('streak_history')
         .eq('id', currentUserId)
         .maybeSingle();
 
-      if (profile?.streak_history) {
-        const raw = typeof profile.streak_history === 'string'
-          ? JSON.parse(profile.streak_history)
-          : profile.streak_history;
-        
+      if (existingProfile?.streak_history) {
+        let raw = existingProfile.streak_history;
+
+        // If stored as a JSON string, parse it first
+        if (typeof raw === 'string') {
+          try { raw = JSON.parse(raw); } catch { raw = null; }
+        }
+
         if (Array.isArray(raw)) {
+          // Old format: plain array of date strings — lift into new shape
           updatedHistoryObj.dates = raw;
         } else if (raw && typeof raw === 'object') {
-          updatedHistoryObj = { ...raw };
+          // Merge field-by-field so we never lose existing analytics data
+          updatedHistoryObj = {
+            ...updatedHistoryObj,      // defaults first
+            ...raw,                    // existing DB values second
+            // Always guarantee arrays / numbers are the right type
+            dates: Array.isArray(raw.dates) ? raw.dates : [],
+            journey: Array.isArray(raw.journey) ? raw.journey : [],
+            visits: typeof raw.visits === 'number' ? raw.visits : 0,
+            payment_attempts: typeof raw.payment_attempts === 'number' ? raw.payment_attempts : 0,
+          };
         }
+        // If raw is null / false / empty string → keep the safe defaults above
       }
     } catch (err) {
-      console.warn('Failed to retrieve current profiles history for metadata update:', err);
+      console.warn('Failed to retrieve current streak_history — writing with safe defaults:', err);
     }
 
-    // Merge properties
-    updatedHistoryObj.phone = metadata.phone ?? updatedHistoryObj.phone ?? '';
-    updatedHistoryObj.company = metadata.company ?? updatedHistoryObj.company ?? '';
-    updatedHistoryObj.role = metadata.role ?? updatedHistoryObj.role ?? '';
-    updatedHistoryObj.linkedin = metadata.linkedin ?? updatedHistoryObj.linkedin ?? '';
+    // 2. Overlay only the metadata fields the user is changing
+    //    Coerce everything to string to prevent downstream type-errors
+    if (metadata.phone    !== undefined) updatedHistoryObj.phone    = String(metadata.phone    ?? '');
+    if (metadata.company  !== undefined) updatedHistoryObj.company  = String(metadata.company  ?? '');
+    if (metadata.role     !== undefined) updatedHistoryObj.role     = String(metadata.role     ?? '');
+    if (metadata.linkedin !== undefined) updatedHistoryObj.linkedin = String(metadata.linkedin ?? '');
 
+    // 3. Write back to the profiles table
     const profileUpdates = { streak_history: updatedHistoryObj };
     if (metadata.full_name !== undefined) {
-      profileUpdates.full_name = metadata.full_name;
+      profileUpdates.full_name = String(metadata.full_name ?? '');
     }
 
     const { error: profileError } = await supabase
       .from('profiles')
       .update(profileUpdates)
       .eq('id', currentUserId);
-    
+
     if (profileError) {
       console.error('Profile update error:', profileError);
       throw new Error('Failed to update details in profile. Please try again.');
@@ -267,41 +294,35 @@ export function AuthProvider({ children }) {
       setProfile(prev => prev ? { ...prev, full_name: metadata.full_name } : prev);
     }
 
-    // 2. Save extended details (phone, company, role, linkedin) to localStorage IMMEDIATELY (local fallback cache)
+    // 4. Save extended details to localStorage immediately (local fallback cache)
     const extended = {
-      phone: metadata.phone ?? '',
-      company: metadata.company ?? '',
-      role: metadata.role ?? '',
-      linkedin: metadata.linkedin ?? '',
+      phone:    String(metadata.phone    ?? ''),
+      company:  String(metadata.company  ?? ''),
+      role:     String(metadata.role     ?? ''),
+      linkedin: String(metadata.linkedin ?? ''),
     };
     saveExtendedDetails(currentUserId, extended);
     setExtendedDetails(extended);
 
-    // 3. Also update the raw user state so values appear in the context immediately
+    // 5. Update in-memory user state so the UI reflects changes immediately
     setUser(prev => {
       if (!prev) return prev;
       return {
         ...prev,
-        user_metadata: {
-          ...(prev.user_metadata || {}),
-          ...metadata,
-        }
+        user_metadata: { ...(prev.user_metadata || {}), ...metadata },
       };
     });
 
-    // Log event if phone was documented
+    // 6. Track phone capture event
     if (metadata.phone) {
       trackEvent('phone_documented', { phone: metadata.phone }, currentUserId);
     }
 
-    // 4. Fire-and-forget: try to sync to supabase.auth.updateUser in background (non-critical)
+    // 7. Fire-and-forget background sync to supabase.auth (non-critical)
     supabase.auth.updateUser({ data: metadata })
       .then(({ error }) => {
-        if (error) {
-          console.warn('Background auth.updateUser failed (non-critical):', error.message);
-        } else {
-          console.log('Background auth.updateUser succeeded.');
-        }
+        if (error) console.warn('Background auth.updateUser failed (non-critical):', error.message);
+        else       console.log('Background auth.updateUser succeeded.');
       })
       .catch(err => console.warn('Background auth.updateUser exception:', err));
 

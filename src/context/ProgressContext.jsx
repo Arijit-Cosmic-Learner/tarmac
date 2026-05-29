@@ -47,29 +47,34 @@ export function ProgressProvider({ children }) {
           .from('profiles')
           .select('streak_count, last_active_date, streak_history')
           .eq('id', user.id)
-          .single();
+          .maybeSingle(); // safe — won't throw if row doesn't exist yet
 
         if (profileError) {
-          // If profile fetch fails or hasn't synced yet, fall back silently
-          console.warn('Profile fetch warning (might not exist yet):', profileError.message);
+          console.warn('Profile fetch warning:', profileError.message);
           return;
         }
 
         if (profileData) {
-          let history = [];
+          let historyDates = [];
           if (profileData.streak_history) {
             try {
-              history = typeof profileData.streak_history === 'string'
+              let raw = typeof profileData.streak_history === 'string'
                 ? JSON.parse(profileData.streak_history)
                 : profileData.streak_history;
+
+              if (Array.isArray(raw)) {
+                historyDates = raw; // old plain-array format
+              } else if (raw && typeof raw === 'object') {
+                historyDates = Array.isArray(raw.dates) ? raw.dates : [];
+              }
             } catch (e) {
-              history = [];
+              historyDates = [];
             }
           }
           setStreak({
             current: profileData.streak_count || 0,
             lastPracticed: profileData.last_active_date || null,
-            history: Array.isArray(history) ? history : (history?.dates || []),
+            history: historyDates,
           });
         }
       } catch (err) {
