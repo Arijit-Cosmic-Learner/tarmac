@@ -5,13 +5,12 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  // Allow both POST (typical for client callback verification and Webhook redirects)
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const KEY = process.env.EASEBUZZ_KEY || '2P17ZFT5KG';
-  const SALT = process.env.EASEBUZZ_SALT || 'DAH88Y353Q';
+  const KEY = process.env.EASEBUZZ_KEY;
+  const SALT = process.env.EASEBUZZ_SALT;
   
   const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -21,7 +20,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server database configuration error.' });
   }
 
-  // Parse payload (can be direct JSON from frontend, or application/x-www-form-urlencoded if coming from a direct redirect page)
   const data = req.body || {};
   
   const {
@@ -40,29 +38,44 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing required validation fields.' });
   }
 
-  // UDFs fallback checks
-  const udf2 = data.udf2 || '';
-  const udf3 = data.udf3 || '';
-  const udf4 = data.udf4 || '';
-  const udf5 = data.udf5 || '';
-  const udf6 = data.udf6 || '';
-  const udf7 = data.udf7 || '';
-  const udf8 = data.udf8 || '';
-  const udf9 = data.udf9 || '';
-  const udf10 = data.udf10 || '';
+  const isMock = hash === 'mock_verified_hash';
 
-  // ── Step 1: Verify Cryptographic Hash ──────────────────────────────────────
-  // Reverse Hash Sequence: salt|status|udf10|udf9|udf8|udf7|udf6|udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
-  const hashString = `${SALT}|${status}|${udf10}|${udf9}|${udf8}|${udf7}|${udf6}|${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${KEY}`;
-  
-  const computedHash = crypto
-    .createHash('sha512')
-    .update(hashString)
-    .digest('hex');
+  // ── Step 1: Verify Signature / Hash ────────────────────────────────────────
+  if (isMock) {
+    // Only allow mock validation if credentials are not configured in Vercel
+    if (KEY || SALT) {
+      console.warn('Blocked mock payment verify attempt since production keys are configured.');
+      return res.status(400).json({ error: 'Mock verification not allowed in production environment.' });
+    }
+    console.log(`Bypassing hash verification: Mock Sandbox Mode active for transaction: ${txnid}`);
+  } else {
+    // Normal validation with keys
+    if (!KEY || !SALT) {
+      return res.status(400).json({ error: 'Easebuzz credentials not configured. Please use Mock Sandbox Mode.' });
+    }
 
-  if (computedHash !== hash) {
-    console.error('Cryptographic signature mismatch! Computed:', computedHash, 'Received:', hash);
-    return res.status(400).json({ error: 'Payment signature validation failed. Data integrity compromise.' });
+    const udf2 = data.udf2 || '';
+    const udf3 = data.udf3 || '';
+    const udf4 = data.udf4 || '';
+    const udf5 = data.udf5 || '';
+    const udf6 = data.udf6 || '';
+    const udf7 = data.udf7 || '';
+    const udf8 = data.udf8 || '';
+    const udf9 = data.udf9 || '';
+    const udf10 = data.udf10 || '';
+
+    // Reverse Hash Sequence: salt|status|udf10|udf9|udf8|udf7|udf6|udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+    const hashString = `${SALT}|${status}|${udf10}|${udf9}|${udf8}|${udf7}|${udf6}|${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${KEY}`;
+    
+    const computedHash = crypto
+      .createHash('sha512')
+      .update(hashString)
+      .digest('hex');
+
+    if (computedHash !== hash) {
+      console.error('Cryptographic signature mismatch! Computed:', computedHash, 'Received:', hash);
+      return res.status(400).json({ error: 'Payment signature validation failed.' });
+    }
   }
 
   console.log(`Easebuzz payment verification checksum matched. Transaction ID: ${txnid}, Status: ${status}`);
