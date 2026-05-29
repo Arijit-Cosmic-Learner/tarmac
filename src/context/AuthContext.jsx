@@ -69,7 +69,7 @@ export function AuthProvider({ children }) {
           is_paid: false,
           streak_count: 0,
           last_active_date: null,
-          streak_history: []
+          streak_history: {}
         };
         const { data: insertedData, error: insertError } = await supabase
           .from('profiles')
@@ -120,9 +120,16 @@ export function AuthProvider({ children }) {
       try {
         let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
         if (userProfile?.streak_history) {
-          history = typeof userProfile.streak_history === 'string' 
+          const rawHistory = typeof userProfile.streak_history === 'string' 
             ? JSON.parse(userProfile.streak_history) 
             : userProfile.streak_history;
+            
+          // If it's an array (from old initialization bug), convert it
+          if (Array.isArray(rawHistory)) {
+            history.dates = rawHistory;
+          } else if (rawHistory && typeof rawHistory === 'object') {
+            history = { ...history, ...rawHistory };
+          }
         }
         
         history.phone = capturedPhone;
@@ -275,8 +282,8 @@ export function AuthProvider({ children }) {
           try { raw = JSON.parse(raw); } catch { raw = null; }
         }
 
+        // If it's a legacy array, convert it to an object with dates
         if (Array.isArray(raw)) {
-          // Old format: plain array of date strings — lift into new shape
           updatedHistoryObj.dates = raw;
         } else if (raw && typeof raw === 'object') {
           // Merge field-by-field so we never lose existing analytics data
