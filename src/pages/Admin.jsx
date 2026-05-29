@@ -20,11 +20,13 @@ export default function Admin() {
   // Data States
   const [profiles, setProfiles] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [webhooks, setWebhooks] = useState([]);
   
   // Loading & Error States
   const [loading, setLoading] = useState(true);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingWebhooks, setLoadingWebhooks] = useState(false);
   const [error, setError] = useState(null);
 
@@ -103,6 +105,21 @@ export default function Admin() {
     }
   };
 
+  // Fetch Orders from Razorpay API
+  const fetchOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const res = await fetch('/api/razorpay-fetch-orders');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setOrders(data.items || []);
+    } catch (err) {
+      console.error('Failed to fetch orders:', err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
   // Fetch Webhooks from Supabase
   const fetchWebhooks = async () => {
     setLoadingWebhooks(true);
@@ -126,7 +143,10 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'payments' && payments.length === 0) fetchPayments();
+    if (activeTab === 'payments') {
+      if (payments.length === 0) fetchPayments();
+      if (orders.length === 0) fetchOrders();
+    }
     if (activeTab === 'webhooks' && webhooks.length === 0) fetchWebhooks();
   }, [activeTab]);
 
@@ -427,11 +447,11 @@ export default function Admin() {
       <div className="tab-content">
         <div className="tab-header">
           <div>
-            <h2>Payments & Recovery</h2>
-            <p>Recent transactions and manual payment links.</p>
+            <h2>Payments and Orders</h2>
+            <p>Recent transactions, orders, and manual payment links.</p>
           </div>
-          <button className="btn-sync" onClick={fetchPayments} disabled={loadingPayments}>
-            <RefreshCw size={16} className={loadingPayments ? 'spin' : ''} /> Refresh API
+          <button className="btn-sync" onClick={() => { fetchPayments(); fetchOrders(); }} disabled={loadingPayments || loadingOrders}>
+            <RefreshCw size={16} className={(loadingPayments || loadingOrders) ? 'spin' : ''} /> Refresh APIs
           </button>
         </div>
 
@@ -502,6 +522,36 @@ export default function Admin() {
               </div>
             )}
           </div>
+
+          {/* Column 3: Recent Orders from Razorpay */}
+          <div className="transactions-section">
+            <h3>Recent Orders</h3>
+            {loadingOrders ? (
+              <div className="empty-state"><RefreshCw className="spin" /> Loading orders...</div>
+            ) : orders.length === 0 ? (
+              <div className="empty-state">No recent orders found.</div>
+            ) : (
+              <div className="transactions-list">
+                {orders.map(order => (
+                  <div key={order.id} className="txn-card">
+                    <div className="txn-header">
+                      <span className="txn-amount">₹{order.amount / 100}</span>
+                      <span className={`txn-status ${order.status}`}>{order.status}</span>
+                    </div>
+                    <div className="txn-details">
+                      <span>Order ID: {order.id}</span>
+                      <span>Created: {new Date(order.created_at * 1000).toLocaleString()}</span>
+                      <span>Payments Attached: {order.payments?.items?.length || 0}</span>
+                      {order.payments?.items?.length > 0 && (
+                        <span>Pay ID: {order.payments.items[0].id}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     );
