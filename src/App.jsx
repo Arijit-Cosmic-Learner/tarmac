@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
@@ -36,7 +36,16 @@ function PublicRoute({ children }) {
 // Admin route guard: check for admin credentials
 function AdminRoute({ children }) {
   const { user, isAuthenticated, loading } = useAuth();
-  if (loading) return (
+  const [timedOut, setTimedOut] = useState(false);
+
+  // Safety net: if auth loading takes more than 3 seconds, stop waiting
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setTimedOut(true), 3000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  if (loading && !timedOut) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh', color: 'var(--text-muted)' }}>
       Loading...
     </div>

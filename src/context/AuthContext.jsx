@@ -113,15 +113,19 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Check active session on mount
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      await initUser(session?.user || null);
+      // Set loading false IMMEDIATELY once we know whether user is logged in or not.
+      // Do NOT await initUser — profile fetch happens in the background.
+      initUser(session?.user || null);
       setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth event:', event);
+      // Immediately resolve loading so route guards never hang
+      setLoading(false);
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        await initUser(session?.user || null);
+        initUser(session?.user || null);
       } else if (event === 'SIGNED_OUT') {
         setUser(GUEST_USER);
         setProfile(GUEST_PROFILE);
@@ -132,7 +136,6 @@ export function AuthProvider({ children }) {
           setUser(session.user);
         }
       }
-      setLoading(false);
     });
 
     return () => {
