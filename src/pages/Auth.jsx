@@ -8,8 +8,13 @@ import './Auth.css';
 export default function Auth() {
   const [params] = useSearchParams();
   const [tab, setTab] = useState(params.get('tab') === 'signup' ? 'signup' : 'login');
-  const [form, setForm] = useState({ email: '', name: '', password: '' });
+  const [form, setForm] = useState({ email: '', name: '', password: '', phone: '' });
   const [showPw, setShowPw] = useState(false);
+  
+  // Pre-Auth Lead Capture States
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [capturePhone, setCapturePhone] = useState('');
+  
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,13 +31,43 @@ export default function Auth() {
     setSuccessMsg('');
   };
 
+  const captureLead = async (phoneStr, sourceStr) => {
+    try {
+      await supabase.from('leads').insert([{ phone: phoneStr, source: sourceStr }]);
+    } catch (err) {
+      console.error('Failed to capture lead:', err);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setError('');
     setSuccessMsg('');
+    if (!capturePhone) {
+      setShowPhoneModal(true);
+      return;
+    }
+    
     try {
       await loginWithGoogle();
     } catch (err) {
       setError(err.message || 'Google Sign-In failed');
+    }
+  };
+
+  const submitPhoneModal = async (e) => {
+    e.preventDefault();
+    if (!capturePhone || capturePhone.length < 10) {
+      setError('Please enter a valid phone number');
+      return;
+    }
+    setShowPhoneModal(false);
+    setLoading(true);
+    await captureLead(capturePhone, 'google_oauth_intercept');
+    try {
+      await loginWithGoogle();
+    } catch (err) {
+      setError(err.message || 'Google Sign-In failed');
+      setLoading(false);
     }
   };
 
@@ -47,10 +82,22 @@ export default function Auth() {
         navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }
+        if (!form.phone.trim()) { setError('Please enter your phone number'); setLoading(false); return; }
+        
+        // Capture lead before auth
+        await captureLead(form.phone, 'email_signup');
+        
         const signUpData = await signup(form.email, form.name.trim(), form.password);
+        
         if (!signUpData?.session) {
           setSuccessMsg('Account created successfully! Please check your inbox for a confirmation link to activate your account.');
         } else {
+          // Immediately save phone to user profile using context
+          try {
+            const extendedDetails = JSON.parse(localStorage.getItem(`tarmac_extended_${signUpData.user.id}`) || '{}');
+            extendedDetails.phone = form.phone;
+            localStorage.setItem(`tarmac_extended_${signUpData.user.id}`, JSON.stringify(extendedDetails));
+          } catch(e) {}
           navigate('/dashboard');
         }
       }
@@ -88,14 +135,24 @@ export default function Auth() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {tab === 'signup' && (
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input
-                type="text" className="form-input" placeholder="Arjun Sharma"
-                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                required autoFocus={tab === 'signup'}
-              />
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input
+                  type="text" className="form-input" placeholder="Arjun Sharma"
+                  value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  required autoFocus={tab === 'signup'}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">WhatsApp Number</label>
+                <input
+                  type="tel" className="form-input" placeholder="+91 98765 43210"
+                  value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  required
+                />
+              </div>
+            </>
           )}
           <div className="form-group">
             <label className="form-label">Email</label>
@@ -141,6 +198,39 @@ export default function Auth() {
           </button>
         </p>
       </div>
+
+      {showPhoneModal && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-slide" style={{ maxWidth: '400px', width: '90%' }}>
+            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Just one more step</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+              Please enter your WhatsApp number to secure your account and receive interview alerts.
+            </p>
+            <form onSubmit={submitPhoneModal}>
+              <div className="form-group">
+                <input
+                  type="tel"
+                  className="form-input"
+                  placeholder="+91 98765 43210"
+                  value={capturePhone}
+                  onChange={(e) => setCapturePhone(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button type="button" className="btn-sync" onClick={() => setShowPhoneModal(false)} style={{ flex: 1 }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
+                  Continue
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

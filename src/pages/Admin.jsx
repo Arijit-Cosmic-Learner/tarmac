@@ -21,6 +21,7 @@ export default function Admin() {
   const [profiles, setProfiles] = useState([]);
   const [payments, setPayments] = useState([]);
   const [webhooks, setWebhooks] = useState([]);
+  const [leads, setLeads] = useState([]);
   
   // Loading & Error States
   const [loading, setLoading] = useState(true);
@@ -110,13 +111,13 @@ export default function Admin() {
   const fetchWebhooks = async () => {
     setLoadingWebhooks(true);
     try {
-      const { data, error } = await supabase
+      const { data, error: wErr } = await supabase
         .from('webhook_events')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
-      if (error) throw error;
-      setWebhooks(data || []);
+      
+      if (!wErr) setWebhooks(data || []);
     } catch (err) {
       console.error('Failed to fetch webhooks:', err);
     } finally {
@@ -124,8 +125,23 @@ export default function Admin() {
     }
   };
 
+  // Fetch Pre-Auth Leads from Supabase
+  const fetchLeads = async () => {
+    try {
+      const { data, error: lErr } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!lErr) setLeads(data || []);
+    } catch (err) {
+      console.error('Failed to fetch leads:', err);
+    }
+  };
+
   useEffect(() => {
     fetchProfiles();
+    fetchLeads();
   }, []);
 
   useEffect(() => {
@@ -603,7 +619,18 @@ export default function Admin() {
     // Determine the filtered candidates based on the selected segment
     let segmentedCandidates = profiles;
     
-    if (retargetSegment === 'dropped') {
+    if (retargetSegment === 'preauth') {
+      segmentedCandidates = leads.map(lead => ({
+        id: lead.id,
+        full_name: 'Anonymous (Pre-Auth)',
+        last_active_date: new Date(lead.created_at).toLocaleString(),
+        visits: 0,
+        payment_attempts: 0,
+        phone: lead.phone,
+        email: null,
+        is_preauth: true
+      }));
+    } else if (retargetSegment === 'dropped') {
       segmentedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
     } else if (retargetSegment === 'free') {
       segmentedCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
@@ -636,6 +663,7 @@ export default function Admin() {
             style={{ padding: '0.5rem', background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
           >
             <option value="all">All Profiles</option>
+            <option value="preauth">Pre-Auth Leads (Dropped at Signup)</option>
             <option value="free">All Free Users</option>
             <option value="dropped">Dropped at Checkout (High Intent)</option>
             <option value="/pricing">Viewed Pricing Page</option>
@@ -674,9 +702,18 @@ export default function Admin() {
                     <td>{u.email || u.phone || 'N/A'}</td>
                     <td>
                       <div style={{display: 'flex', gap: '0.5rem'}}>
-                        <button className="btn-generate" onClick={() => openLinkModal(u, 299)}>
-                          Generate Link
-                        </button>
+                        {!u.is_preauth && (
+                          <button className="btn-generate" onClick={() => openLinkModal(u, 299)}>
+                            Generate Link
+                          </button>
+                        )}
+                        {u.is_preauth && (
+                          <button className="btn-generate" onClick={() => {
+                             alert('To generate a link for a pre-auth lead, you must manually create it in Razorpay and send it via WhatsApp to: ' + u.phone);
+                          }}>
+                            WhatsApp Number
+                          </button>
+                        )}
                         {u.email && (
                           <a 
                             href={`mailto:${u.email}?subject=Exclusive Offer for Tarmac Pro`} 
