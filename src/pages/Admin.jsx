@@ -482,19 +482,21 @@ export default function Admin() {
                       <span>Contact: {txn.contact || 'N/A'}</span>
                       <span>Date: {new Date(txn.created_at * 1000).toLocaleString()}</span>
                     </div>
-                    <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
-                      <button 
-                        className="btn-generate" 
-                        onClick={() => openLinkModal({
-                          id: txn.notes?.userId || `razorpay_${txn.id}`,
-                          full_name: txn.notes?.name || 'Razorpay Customer',
-                          email: txn.email,
-                          phone: txn.contact
-                        }, 499)}
-                      >
-                        <LinkIcon size={14} /> Custom Link
-                      </button>
-                    </div>
+                    {['failed', 'created', 'authorizing'].includes(txn.status?.toLowerCase()) && (
+                      <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button 
+                          className="btn-generate" 
+                          onClick={() => openLinkModal({
+                            id: txn.notes?.userId || `razorpay_${txn.id}`,
+                            full_name: txn.notes?.name || 'Razorpay Customer',
+                            email: txn.email,
+                            phone: txn.contact
+                          }, 499)}
+                        >
+                          <LinkIcon size={14} /> Custom Link
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
