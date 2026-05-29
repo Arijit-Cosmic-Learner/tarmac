@@ -34,183 +34,16 @@ function loadRazorpayScript() {
   });
 }
 
-// Dynamically load the Easebuzz checkout script
-function loadEasebuzzScript() {
-  return new Promise((resolve) => {
-    if (window.EasebuzzCheckout) return resolve(true);
-    const script = document.createElement('script');
-    script.src = 'https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.0/easebuzz-checkout-v2.min.js';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-}
-
 export default function Pricing() {
   const { user, isPaid, upgradeToPaid } = useAuth();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(null); // 'success' | 'error' | null
   const [paymentMessage, setPaymentMessage] = useState('');
-  const [mockSession, setMockSession] = useState(null);
 
-  // Pre-load payment scripts on mount for faster checkout
+  // Pre-load Razorpay script on mount for faster checkout
   useEffect(() => {
     loadRazorpayScript();
-    loadEasebuzzScript();
   }, []);
-
-  const handleMockResponse = async (status) => {
-    const session = mockSession;
-    setMockSession(null);
-
-    if (status === 'success') {
-      setCheckoutLoading(true);
-      setPaymentStatus('info');
-      setPaymentMessage('Verifying transaction details...');
-
-      try {
-        const verifyRes = await fetch('/api/easebuzz-verify-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            txnid: session.txnid,
-            amount: session.amount,
-            productinfo: session.productinfo,
-            firstname: session.firstname,
-            email: session.email,
-            status: 'success',
-            udf1: user.id,
-            hash: 'mock_verified_hash',
-          }),
-        });
-        const verifyData = await verifyRes.json();
-        
-        if (!verifyRes.ok || !verifyData.success) {
-          throw new Error(verifyData.error || 'Mock signature verification failed.');
-        }
-
-        await upgradeToPaid();
-        setPaymentStatus('success');
-        setPaymentMessage('🎉 Welcome to Pro! All features are now unlocked (Sandbox Simulator).');
-      } catch (err) {
-        setPaymentStatus('error');
-        setPaymentMessage(`Mock verification failed: ${err.message}`);
-      } finally {
-        setCheckoutLoading(false);
-      }
-    } else {
-      setPaymentStatus('error');
-      setPaymentMessage('Payment simulated as cancelled or failed.');
-    }
-  };
-
-  const handleEasebuzzUpgrade = async () => {
-    if (!user) {
-      window.location.href = '/login?tab=signup';
-      return;
-    }
-
-    setCheckoutLoading(true);
-    setPaymentStatus(null);
-    setPaymentMessage('');
-
-    // Track payment attempt event
-    trackEvent('payment_attempt', { step: 'initiated_easebuzz' }, user.id);
-
-    // Step 1: Ensure Easebuzz script is loaded
-    const scriptLoaded = await loadEasebuzzScript();
-    if (!scriptLoaded) {
-      setPaymentStatus('error');
-      setPaymentMessage('Failed to load Easebuzz checkout gateway. Please check your connection and try again.');
-      setCheckoutLoading(false);
-      return;
-    }
-
-    // Step 2: Create order via our secure Vercel backend
-    let sessionData;
-    try {
-      const res = await fetch('/api/easebuzz-create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: '499.00', // ₹499.00
-          userId: user.id,
-          email: user.email,
-          firstname: user.name || user.email.split('@')[0] || 'Candidate',
-          phone: user.phone || '9999999999', // fallback phone required by Easebuzz
-        }),
-      });
-      sessionData = await res.json();
-      if (!res.ok) throw new Error(sessionData.error || 'Could not initiate checkout session');
-    } catch (err) {
-      setPaymentStatus('error');
-      setPaymentMessage(err.message || 'Failed to initiate payment. Please try again.');
-      setCheckoutLoading(false);
-      return;
-    }
-
-    // Check if API triggered Mock Sandbox fallback mode
-    if (sessionData.isMock) {
-      setMockSession(sessionData);
-      setCheckoutLoading(false);
-      return;
-    }
-
-    setCheckoutLoading(false);
-
-    // Step 3: Open Easebuzz checkout modal
-    try {
-      const env = sessionData.env === 'prod' ? 'prod' : 'test';
-      const easebuzzCheckout = new window.EasebuzzCheckout(sessionData.key, env);
-
-      const options = {
-        access_key: sessionData.access_key,
-        onResponse: async (response) => {
-          console.log('Easebuzz payment response:', response);
-
-          if (response.status === 'success') {
-            setCheckoutLoading(true);
-            setPaymentStatus('info');
-            setPaymentMessage('Verifying transaction details...');
-
-            try {
-              // Post to verify payment backend
-              const verifyRes = await fetch('/api/easebuzz-verify-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(response),
-              });
-              const verifyData = await verifyRes.json();
-              
-              if (!verifyRes.ok || !verifyData.success) {
-                throw new Error(verifyData.error || 'Signature verification failed.');
-              }
-
-              // Upgrade success
-              await upgradeToPaid();
-              setPaymentStatus('success');
-              setPaymentMessage('🎉 Welcome to Pro! All features are now unlocked.');
-            } catch (err) {
-              setPaymentStatus('error');
-              setPaymentMessage(`Verification failed: ${err.message || 'Please contact support with Txn ID: ' + response.txnid}`);
-            } finally {
-              setCheckoutLoading(false);
-            }
-          } else {
-            setPaymentStatus('error');
-            setPaymentMessage(`Payment failed or cancelled: ${response.error_Message || 'Please try again.'}`);
-          }
-        },
-        theme: '#FF5C00' // Amber accent
-      };
-
-      easebuzzCheckout.initiatePayment(options);
-    } catch (err) {
-      console.error('Easebuzz SDK runtime error:', err);
-      setPaymentStatus('error');
-      setPaymentMessage('Failed to open the checkout screen. Please try again.');
-    }
-  };
 
   const handleUpgrade = async () => {
     setCheckoutLoading(true);
@@ -218,7 +51,7 @@ export default function Pricing() {
     setPaymentMessage('');
 
     // Track payment attempt event
-    trackEvent('payment_attempt', { step: 'initiated_razorpay' }, user?.id);
+    trackEvent('payment_attempt', { step: 'initiated' }, user?.id);
 
     // Step 1: Ensure Razorpay script is loaded
     const scriptLoaded = await loadRazorpayScript();
@@ -452,7 +285,7 @@ export default function Pricing() {
             ) : (
               <button
                 className="btn-primary pricing-cta pro-cta"
-                onClick={handleEasebuzzUpgrade}
+                onClick={handleUpgrade}
                 disabled={checkoutLoading}
               >
                 {checkoutLoading ? (
@@ -485,85 +318,6 @@ export default function Pricing() {
           </div>
         </div>
       </div>
-
-      {/* Mock Sandbox Modal */}
-      {mockSession && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1100,
-          padding: '1.5rem'
-        }}>
-          <div style={{
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border)',
-            borderRadius: '16px',
-            maxWidth: '420px',
-            width: '100%',
-            boxShadow: 'var(--shadow-lg)',
-            textAlign: 'center',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              padding: '1.25rem 1.5rem',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem'
-            }}>
-              <Zap size={18} style={{ color: 'var(--lime-500)' }} />
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Sandbox Payment Simulator</h3>
-            </div>
-            
-            <div style={{ padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                Your Easebuzz credentials are not configured yet. You can use this sandbox simulator to test the full payment and upgrade flow instantly.
-              </p>
-              
-              <div style={{
-                background: 'var(--surface-2)',
-                padding: '1rem',
-                borderRadius: '8px',
-                border: '1px solid var(--border)',
-                fontSize: '0.85rem',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem'
-              }}>
-                <div><strong>Product:</strong> {mockSession.productinfo}</div>
-                <div><strong>Amount:</strong> ₹{mockSession.amount}</div>
-                <div><strong>Txn ID:</strong> <span style={{ fontFamily: 'monospace' }}>{mockSession.txnid}</span></div>
-                <div><strong>Candidate:</strong> {mockSession.firstname}</div>
-                <div><strong>Email:</strong> {mockSession.email}</div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <button 
-                  className="btn-primary" 
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={() => handleMockResponse('success')}
-                >
-                  Simulate Successful Payment
-                </button>
-                <button 
-                  className="btn-secondary" 
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={() => handleMockResponse('failure')}
-                >
-                  Simulate Cancel / Failure
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
