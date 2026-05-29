@@ -112,26 +112,27 @@ export function AuthProvider({ children }) {
 
     // Now that the profile is guaranteed to exist, sync the captured phone number if we have one
     const capturedPhone = localStorage.getItem('tarmac_captured_phone_number');
-    if (capturedPhone && !stored.phone) {
+    
+    let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
+    if (userProfile?.streak_history) {
+      const rawHistory = typeof userProfile.streak_history === 'string' 
+        ? JSON.parse(userProfile.streak_history) 
+        : userProfile.streak_history;
+        
+      if (Array.isArray(rawHistory)) {
+        history.dates = rawHistory;
+      } else if (rawHistory && typeof rawHistory === 'object') {
+        history = { ...history, ...rawHistory };
+      }
+    }
+
+    // Sync phone if we captured one and it's missing from DB OR missing from local state
+    if (capturedPhone && (!stored.phone || history.phone !== capturedPhone)) {
       stored.phone = capturedPhone;
       saveExtendedDetails(sessionUser.id, stored);
       setExtendedDetails({ ...stored }); // trigger re-render with new phone
       
       try {
-        let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
-        if (userProfile?.streak_history) {
-          const rawHistory = typeof userProfile.streak_history === 'string' 
-            ? JSON.parse(userProfile.streak_history) 
-            : userProfile.streak_history;
-            
-          // If it's an array (from old initialization bug), convert it
-          if (Array.isArray(rawHistory)) {
-            history.dates = rawHistory;
-          } else if (rawHistory && typeof rawHistory === 'object') {
-            history = { ...history, ...rawHistory };
-          }
-        }
-        
         history.phone = capturedPhone;
         await supabase.from('profiles').update({ streak_history: history }).eq('id', sessionUser.id);
         
