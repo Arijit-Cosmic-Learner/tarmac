@@ -408,15 +408,21 @@
 }
 .txn-amount { font-weight: 800; font-size: 1.1rem; }
 .txn-status {
-  padding: 0.15rem 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.6rem;
   border-radius: 99px;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  height: fit-content;
 }
-.txn-status.captured { background: rgba(163, 230, 53, 0.1); color: var(--lime-500); }
-.txn-status.created { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-.txn-status.failed { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.txn-status.captured { background: rgba(163, 230, 53, 0.15); color: var(--lime-500); border: 1px solid rgba(163, 230, 53, 0.3); }
+.txn-status.created, .txn-status.authorizing { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+.txn-status.failed { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
 
 .txn-details {
   display: grid;
