@@ -37,6 +37,7 @@ export default function Auth() {
     try {
       await supabase.from('leads').insert([{ phone: phoneStr, source: sourceStr }]);
       localStorage.setItem('tarmac_phone_captured', 'true');
+      localStorage.setItem('tarmac_captured_phone_number', phoneStr);
     } catch (err) {
       console.error('Failed to capture lead:', err);
     }

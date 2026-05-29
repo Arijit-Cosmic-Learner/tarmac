@@ -100,6 +100,28 @@ export function AuthProvider({ children }) {
     setUser(sessionUser);
     // Load extended details from local storage immediately (instant)
     const stored = loadExtendedDetails(sessionUser.id);
+    
+    // Check if we captured a phone number prior to auth
+    const capturedPhone = localStorage.getItem('tarmac_captured_phone_number');
+    if (capturedPhone && !stored.phone) {
+      stored.phone = capturedPhone;
+      saveExtendedDetails(sessionUser.id, stored);
+      
+      // Attempt to sync this phone number to Supabase profiles (background)
+      supabase.from('profiles').select('streak_history').eq('id', sessionUser.id).maybeSingle()
+        .then(({ data }) => {
+          let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
+          try {
+            if (data?.streak_history) {
+              history = typeof data.streak_history === 'string' ? JSON.parse(data.streak_history) : data.streak_history;
+            }
+          } catch(e) {}
+          
+          history.phone = capturedPhone;
+          return supabase.from('profiles').update({ streak_history: history }).eq('id', sessionUser.id);
+        }).catch(err => console.error('Failed to sync captured phone:', err));
+    }
+    
     setExtendedDetails(stored);
     
     // Sync guest analytics to DB
