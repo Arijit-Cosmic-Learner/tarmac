@@ -216,11 +216,13 @@ export default function Admin() {
     }
   };
 
+  const candidates = profiles.filter(p => !p.is_admin && p.email !== 'admin.tarmac@gmail.com');
+
   // Metrics for Analytics Tab
-  const totalUsers = profiles.length;
-  const proUsersCount = profiles.filter(p => p.is_paid).length;
-  const totalVisits = profiles.reduce((acc, p) => acc + (p.visits || 0), 0);
-  const totalPaymentAttempts = profiles.reduce((acc, p) => acc + (p.payment_attempts || 0), 0);
+  const totalUsers = candidates.length;
+  const proUsersCount = candidates.filter(p => p.is_paid).length;
+  const totalVisits = candidates.reduce((acc, p) => acc + (p.visits || 0), 0);
+  const totalPaymentAttempts = candidates.reduce((acc, p) => acc + (p.payment_attempts || 0), 0);
 
   // Copy helper
   const handleCopy = (text) => {
@@ -269,7 +271,7 @@ export default function Admin() {
     hero: 0, dashboard: 0, questions: 0, mock: 0, companies: 0, resources: 0, pricing: 0
   };
 
-  profiles.forEach(p => {
+  candidates.forEach(p => {
     let hasHero = false, hasDash = false, hasQ = false, hasMock = false, hasComp = false, hasRes = false, hasPrice = false;
     (p.journey || []).forEach(e => {
       if (e.type !== 'page_view') return;
@@ -313,7 +315,7 @@ export default function Admin() {
     { name: 'Sun', visits: totalVisits > 0 ? Math.floor(totalVisits * 0.15) : 0, signups: totalUsers > 3 ? totalUsers - 3 : totalUsers },
   ];
 
-  const filteredProfiles = profiles.filter(p => {
+  const filteredProfiles = candidates.filter(p => {
     const searchMatch = (p.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                         (p.phone || '').includes(searchTerm);
     const statusMatch = statusFilter === 'all' || 
@@ -512,8 +514,8 @@ export default function Admin() {
   );
 
   const renderPayments = () => {
-    const droppedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
-    const otherFreeCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
+    const droppedCandidates = candidates.filter(p => p.payment_attempts > 0 && !p.is_paid);
+    const otherFreeCandidates = candidates.filter(p => p.payment_attempts === 0 && !p.is_paid);
 
     const renderCandidateRow = (c) => (
       <div key={c.id} className="recovery-card">
@@ -670,29 +672,31 @@ export default function Admin() {
 
   const renderRetargeting = () => {
     // Determine the filtered candidates based on the selected segment
-    let segmentedCandidates = profiles;
+    let segmentedCandidates = candidates;
     
     if (retargetSegment === 'preauth') {
-      segmentedCandidates = leads.map(lead => ({
-        id: lead.id,
-        full_name: 'Anonymous (Pre-Auth)',
-        last_active_date: new Date(lead.created_at).toLocaleString(),
-        visits: 0,
-        payment_attempts: 0,
-        phone: lead.phone,
-        email: null,
-        is_preauth: true
-      }));
+      segmentedCandidates = leads
+        .filter(lead => lead.email !== 'admin.tarmac@gmail.com')
+        .map(lead => ({
+          id: lead.id,
+          full_name: 'Anonymous (Pre-Auth)',
+          last_active_date: new Date(lead.created_at).toLocaleString(),
+          visits: 0,
+          payment_attempts: 0,
+          phone: lead.phone,
+          email: lead.email,
+          is_preauth: true
+        }));
     } else if (retargetSegment === 'dropped') {
-      segmentedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
+      segmentedCandidates = candidates.filter(p => p.payment_attempts > 0 && !p.is_paid);
     } else if (retargetSegment === 'free') {
-      segmentedCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
+      segmentedCandidates = candidates.filter(p => p.payment_attempts === 0 && !p.is_paid);
     } else if (retargetSegment === 'no_contact') {
-      segmentedCandidates = profiles.filter(p => !p.phone && !p.email);
+      segmentedCandidates = candidates.filter(p => !p.phone && !p.email);
     } else if (retargetSegment !== 'all') {
       // Filter by journey path
       const targetPath = retargetSegment; 
-      segmentedCandidates = profiles.filter(p => {
+      segmentedCandidates = candidates.filter(p => {
         if (p.is_paid) return false; // Usually we only retarget free users
         let explored = false;
         (p.journey || []).forEach(e => {

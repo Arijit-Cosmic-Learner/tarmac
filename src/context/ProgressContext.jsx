@@ -127,6 +127,11 @@ export function ProgressProvider({ children }) {
 
       if (progressError) throw progressError;
 
+      // If user is admin, do NOT write/update streak information or profile analytics
+      if (user?.isAdmin) {
+        return;
+      }
+
       // 2. Streak logic calculation
       const today = todayStr();
       let newStreak = { ...streak };
