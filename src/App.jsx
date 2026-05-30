@@ -22,7 +22,7 @@ const ADMIN_EMAIL = 'admin.tarmac@gmail.com';
 // Helper to check if current user is admin
 function useIsAdmin() {
   const { user } = useAuth();
-  return user?.email === ADMIN_EMAIL || localStorage.getItem('tarmac_admin_override') === 'true';
+  return !!user?.isAdmin;
 }
 
 // Route guard: redirect to /login if not authenticated
@@ -68,10 +68,7 @@ function AdminRoute({ children }) {
     </div>
   );
 
-  const isAdmin = isAuthenticated && (
-    user?.email === ADMIN_EMAIL ||
-    localStorage.getItem('tarmac_admin_override') === 'true'
-  );
+  const isAdmin = isAuthenticated && !!user?.isAdmin;
 
   return isAdmin ? children : <Navigate to="/" replace />;
 }
@@ -82,9 +79,9 @@ export default function App() {
 
   // Automatic route tracking on location change
   useEffect(() => {
-    if (user?.email === ADMIN_EMAIL) return; // Skip admin tracking entirely
+    if (user?.isAdmin) return; // Skip admin tracking entirely
     trackPageView(location.pathname, user?.id);
-  }, [location.pathname, user?.id]);
+  }, [location.pathname, user?.id, user?.isAdmin]);
 
   return (
     <>

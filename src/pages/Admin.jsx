@@ -886,6 +886,74 @@ export default function Admin() {
     }
   };
 
+  const [adminEmailInput, setAdminEmailInput] = useState('');
+  const [addingAdmin, setAddingAdmin] = useState(false);
+  const [adminMsg, setAdminMsg] = useState(null);
+
+  // Grant Admin Access
+  const handleGrantAdmin = async (e) => {
+    e.preventDefault();
+    if (!adminEmailInput.trim()) return;
+    
+    setAddingAdmin(true);
+    setAdminMsg(null);
+    try {
+      // Find candidate by email first
+      const { data: candidate, error: findError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('email', adminEmailInput.trim().toLowerCase())
+        .maybeSingle();
+      
+      if (findError) throw findError;
+      if (!candidate) {
+        throw new Error(`No registered user found with email "${adminEmailInput}". They must sign up first.`);
+      }
+
+      // Update their is_admin column to true
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ is_admin: true })
+        .eq('id', candidate.id);
+      
+      if (updateError) throw updateError;
+
+      setAdminMsg({ type: 'success', text: `Successfully granted Administrator access to ${candidate.full_name || adminEmailInput}.` });
+      setAdminEmailInput('');
+      fetchProfiles(); // reload lists
+    } catch (err) {
+      setAdminMsg({ type: 'error', text: err.message || 'Failed to grant admin access.' });
+    } finally {
+      setAddingAdmin(false);
+    }
+  };
+
+  // Revoke Admin Access
+  const handleRevokeAdmin = async (adminId, adminEmail, adminName) => {
+    if (adminEmail === user?.email) {
+      alert("Safety Lock: You cannot revoke your own administrator access.");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to revoke administrator access for ${adminName || adminEmail}?`)) {
+      return;
+    }
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ is_admin: false })
+        .eq('id', adminId);
+
+      if (updateError) throw updateError;
+
+      alert(`Successfully revoked Administrator access for ${adminName || adminEmail}.`);
+      fetchProfiles(); // reload lists
+    } catch (err) {
+      alert('Failed to revoke admin access: ' + err.message);
+    }
+  };
+
   const renderSettings = () => (
     <div className="tab-content">
       <div className="tab-header">
@@ -919,6 +987,93 @@ export default function Admin() {
         >
           Clear My Browser Storage & Go to Login
         </button>
+      </div>
+
+      {/* Administrator Management */}
+      <div className="settings-card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--lime-500)' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+          <Shield size={18} style={{ color: 'var(--lime-400)' }} /> Manage Administrators
+        </h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+          Grant or revoke admin permissions. Administrators can access the Admin Console, view payments, analyze candidate journeys, and send emails.
+        </p>
+
+        {/* Admin Form */}
+        <form onSubmit={handleGrantAdmin} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <input
+            type="email"
+            value={adminEmailInput}
+            onChange={e => { setAdminEmailInput(e.target.value); setAdminMsg(null); }}
+            placeholder="enter-new-admin-email@gmail.com"
+            disabled={addingAdmin}
+            style={{ 
+              flex: 1, minWidth: '240px', padding: '0.55rem 0.75rem', 
+              background: 'var(--surface-3)', border: '1px solid var(--border)',
+              borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.9rem'
+            }}
+            required
+          />
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={addingAdmin}
+            style={{ padding: '0.55rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--lime-500)', color: '#000' }}
+          >
+            {addingAdmin ? 'Granting...' : 'Grant Admin Access'}
+          </button>
+        </form>
+
+        {adminMsg && (
+          <div style={{ 
+            padding: '0.75rem', borderRadius: '6px', marginBottom: '1.25rem', fontSize: '0.85rem',
+            background: adminMsg.type === 'success' ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+            border: `1px solid ${adminMsg.type === 'success' ? 'var(--lime-500)' : '#ef4444'}`,
+            color: adminMsg.type === 'success' ? 'var(--lime-500)' : '#ef4444',
+          }}>
+            {adminMsg.text}
+          </div>
+        )}
+
+        {/* Admin List Table */}
+        <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-2)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-muted)' }}>
+                <th style={{ padding: '0.75rem 1rem' }}>Name</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Email</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.filter(p => p.is_admin || p.email === 'admin.tarmac@gmail.com').map(adminUser => (
+                <tr key={adminUser.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', color: 'var(--text-secondary)' }}>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {adminUser.full_name || 'Admin User'}
+                    {adminUser.email === user?.email && <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: 'var(--lime-400)', background: 'rgba(163,230,53,0.1)', padding: '2px 6px', borderRadius: '4px' }}>You</span>}
+                  </td>
+                  <td style={{ padding: '0.75rem 1rem' }}>{adminUser.email}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                    {adminUser.email === user?.email ? (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', paddingRight: '0.5rem' }}>Protected</span>
+                    ) : (
+                      <button
+                        onClick={() => handleRevokeAdmin(adminUser.id, adminUser.email, adminUser.full_name)}
+                        style={{
+                          background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
+                          fontSize: '0.8rem', fontWeight: 600, padding: '2px 8px'
+                        }}
+                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
+                        onMouseLeave={e => e.target.style.textDecoration = 'none'}
+                      >
+                        Revoke Access
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="settings-card">

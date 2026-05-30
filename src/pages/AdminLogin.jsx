@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, ShieldAlert, KeyRound } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 import './AdminLogin.css';
 
 export default function AdminLogin() {
@@ -19,7 +20,7 @@ export default function AdminLogin() {
   useEffect(() => {
     // If already logged in as admin, send directly to /admin
     if (isAuthenticated) {
-      if (user?.email === ADMIN_EMAIL || localStorage.getItem('tarmac_admin_override') === 'true') {
+      if (user?.isAdmin) {
         navigate('/admin');
       } else {
         // If logged in as non-admin, log them out and prompt
@@ -34,23 +35,27 @@ export default function AdminLogin() {
     setError('');
     setLoading(true);
 
-    if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
-      setError('Access Denied: This portal is restricted to authorized admin accounts.');
-      setLoading(false);
-      return;
-    }
-
     try {
       const loggedInUser = await login(email.trim(), password);
       
-      const isAdmin = loggedInUser.email === ADMIN_EMAIL || 
+      // Fetch user profile from database to check is_admin status
+      const { data: prof, error: profErr } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', loggedInUser.id)
+        .maybeSingle();
+
+      if (profErr) throw new Error('Error verifying admin authorization.');
+
+      const isAdmin = prof?.is_admin || 
+                      loggedInUser.email === ADMIN_EMAIL ||
                       localStorage.getItem('tarmac_admin_override') === 'true';
 
       if (isAdmin) {
         navigate('/admin');
       } else {
         await logout();
-        setError('Access Denied: Unauthorized account credentials.');
+        setError('Access Denied: You do not have administrator permissions.');
       }
     } catch (err) {
       setError(err.message || 'Authentication failed. Please verify credentials.');

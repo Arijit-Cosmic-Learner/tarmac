@@ -96,22 +96,28 @@ export default function Auth() {
       if (tab === 'login') {
         const loggedInUser = await login(form.email, form.password);
         // After login, check if profile has a phone. If not, intercept and ask.
-        // Bypass completely for the admin account
-        if (loggedInUser.email !== 'admin.tarmac@gmail.com') {
-          try {
-            const { data: prof } = await supabase
-              .from('profiles')
-              .select('phone')
-              .eq('id', loggedInUser.id)
-              .maybeSingle();
-            if (!prof?.phone) {
-              setPostLoginUserId(loggedInUser.id);
-              setShowPostLoginPhone(true);
-              setLoading(false);
-              return; // don't navigate yet — wait for phone
-            }
-          } catch (_) {}
-        }
+        // Bypass completely for admin accounts
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('phone, is_admin')
+            .eq('id', loggedInUser.id)
+            .maybeSingle();
+
+          const isUserAdmin = prof?.is_admin || loggedInUser.email === 'admin.tarmac@gmail.com';
+
+          if (isUserAdmin) {
+            navigate('/admin');
+            return;
+          }
+
+          if (!prof?.phone) {
+            setPostLoginUserId(loggedInUser.id);
+            setShowPostLoginPhone(true);
+            setLoading(false);
+            return; // don't navigate yet — wait for phone
+          }
+        } catch (_) {}
         navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }

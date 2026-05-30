@@ -63,12 +63,14 @@ export function AuthProvider({ children }) {
       if (!data) {
         // Profile does not exist, create it
         const fullName = userObj.user_metadata?.full_name || userObj.email?.split('@')[0] || 'User';
+        const isInitialAdmin = userObj.email === 'admin.tarmac@gmail.com';
         const newProfile = {
           id: userObj.id,
           full_name: fullName,
           email: userObj.email || null,   // <-- write email into dedicated column
           phone: null,
           is_paid: false,
+          is_admin: isInitialAdmin,
           streak_count: 0,
           last_active_date: null,
           streak_history: {}
@@ -409,6 +411,7 @@ export function AuthProvider({ children }) {
       linkedin: extendedDetails.linkedin ?? user.user_metadata?.linkedin ?? '',
       plan: profile?.is_paid ? 'paid' : 'free',
       joinedAt: user.created_at,
+      isAdmin: !!profile?.is_admin || user.email === 'admin.tarmac@gmail.com' || localStorage.getItem('tarmac_admin_override') === 'true',
     } : null,
     loading,
     isPaid: !!profile?.is_paid,
