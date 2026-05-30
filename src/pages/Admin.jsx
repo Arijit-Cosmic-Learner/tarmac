@@ -31,6 +31,10 @@ export default function Admin() {
   const [loadingWebhooks, setLoadingWebhooks] = useState(false);
   const [error, setError] = useState(null);
 
+  // Backfill & Repair States
+  const [runningBackfill, setRunningBackfill] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState(null);
+
   // Filters & UI States
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -132,6 +136,7 @@ export default function Admin() {
   // Fetch Webhooks from Supabase
   const fetchWebhooks = async () => {
     setLoadingWebhooks(true);
+    setError(null);
     try {
       const { data, error: wErr } = await supabase
         .from('webhook_events')
@@ -139,9 +144,15 @@ export default function Admin() {
         .order('created_at', { ascending: false })
         .limit(50);
       
-      if (!wErr) setWebhooks(data || []);
+      if (wErr) {
+        console.error('Failed to fetch webhooks:', wErr);
+        setError('Webhook logs RLS permission error: ' + wErr.message + '. Run the Database Backfill utility in System Settings.');
+      } else {
+        setWebhooks(data || []);
+      }
     } catch (err) {
       console.error('Failed to fetch webhooks:', err);
+      setError('Failed to fetch webhooks: ' + err.message);
     } finally {
       setLoadingWebhooks(false);
     }
@@ -325,6 +336,35 @@ export default function Admin() {
                         (statusFilter === 'free' && !p.is_paid);
     return searchMatch && statusMatch;
   });
+
+  // Run Database Backfill & Repair Utility
+  const handleRunBackfill = async () => {
+    setRunningBackfill(true);
+    setBackfillMsg(null);
+    try {
+      const res = await fetch('/api/admin-backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: 'BACKFILL' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to run backfill.');
+      
+      const logSummary = data.logs ? data.logs.join('\n') : '';
+      setBackfillMsg({ 
+        type: 'success', 
+        text: `Success! Webhooks resolved/updated: ${data.updated_webhooks || 0}\n\nLogs:\n${logSummary}` 
+      });
+      
+      // Reload everything
+      fetchProfiles();
+      fetchWebhooks();
+    } catch (err) {
+      setBackfillMsg({ type: 'error', text: err.message });
+    } finally {
+      setRunningBackfill(false);
+    }
+  };
 
   const renderSidebar = () => (
     <div className="admin-sidebar">
@@ -1098,6 +1138,38 @@ export default function Admin() {
           }}
         >
           Clear My Browser Storage & Go to Login
+        </button>
+      </div>
+
+      {/* Webhook & Admin Backfill Utility */}
+      <div className="settings-card" style={{ borderLeft: '4px solid var(--lime-500)', marginBottom: '1.5rem' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+          <Activity size={18} style={{ color: 'var(--lime-400)' }} /> Webhook Logs Backfill & Admin Repair
+        </h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          Runs an administrative routine to force `is_admin=true` for admin.tarmac@gmail.com and matches older webhook logs to their respective registered student profiles using emails, contacts, or payload notes.
+        </p>
+        {backfillMsg && (
+          <div style={{ 
+            padding: '0.75rem', borderRadius: '6px', marginBottom: '1.25rem', fontSize: '0.85rem',
+            background: backfillMsg.type === 'success' ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+            border: `1px solid ${backfillMsg.type === 'success' ? 'var(--lime-500)' : '#ef4444'}`,
+            color: backfillMsg.type === 'success' ? 'var(--lime-500)' : '#ef4444',
+            whiteSpace: 'pre-wrap',
+            maxHeight: '200px',
+            overflowY: 'auto',
+            fontFamily: 'monospace'
+          }}>
+            {backfillMsg.text}
+          </div>
+        )}
+        <button
+          className="btn-generate"
+          style={{ background: 'var(--lime-500)', color: '#000' }}
+          disabled={runningBackfill}
+          onClick={handleRunBackfill}
+        >
+          {runningBackfill ? 'Running Repair & Backfill...' : 'Run Repair & Backfill Utility'}
         </button>
       </div>
 

@@ -71,10 +71,52 @@ export default async function handler(req, res) {
     const paymentEntity = eventData.payload?.payment?.entity;
     const paymentLinkEntity = eventData.payload?.payment_link?.entity;
 
-    const userId = paymentEntity?.notes?.userId || 
+    let userId = paymentEntity?.notes?.userId || 
                    paymentEntity?.notes?.user_id || 
                    paymentLinkEntity?.notes?.userId || 
                    paymentLinkEntity?.notes?.user_id;
+
+    // Proactive matching: if userId is missing, try matching by email/phone in the database
+    if (!userId) {
+      const email = (paymentEntity?.email || paymentLinkEntity?.customer?.email || '').trim().toLowerCase();
+      const contact = (paymentEntity?.contact || paymentLinkEntity?.customer?.contact || '').trim();
+
+      if (email || contact) {
+        // Query profiles to find a match
+        let matchedProfile = null;
+        if (email) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+          if (data) matchedProfile = data;
+        }
+
+        if (!matchedProfile && contact) {
+          const cleanPhone = contact.replace(/[^0-9]/g, '');
+          if (cleanPhone) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('id, phone')
+              .not('phone', 'is', null);
+            
+            if (data) {
+              const matched = data.find(p => {
+                const pPhone = p.phone.replace(/[^0-9]/g, '');
+                return pPhone && (pPhone === cleanPhone || pPhone.endsWith(cleanPhone) || cleanPhone.endsWith(pPhone));
+              });
+              if (matched) matchedProfile = matched;
+            }
+          }
+        }
+
+        if (matchedProfile) {
+          userId = matchedProfile.id;
+          console.log(`Proactively matched missing notes.userId to profile ID ${userId} via email/contact lookup.`);
+        }
+      }
+    }
 
     const paymentId = paymentEntity?.id;
     const orderId = paymentEntity?.order_id || paymentLinkEntity?.id || null;
