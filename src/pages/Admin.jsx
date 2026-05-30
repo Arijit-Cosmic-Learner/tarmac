@@ -35,6 +35,10 @@ export default function Admin() {
   const [runningBackfill, setRunningBackfill] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState(null);
 
+  // Date Filtering & Role Segmentation States
+  const [dateFilter, setDateFilter] = useState('all');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('all');
+
   // Filters & UI States
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -57,6 +61,29 @@ export default function Admin() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSuccess, setEmailSuccess] = useState(false);
   const [emailError, setEmailError] = useState('');
+
+  // Helper to check if a date string/timestamp is within the selected filter range
+  const isWithinDateRange = (dateValue, range) => {
+    if (range === 'all' || !range) return true;
+    if (!dateValue) return false;
+
+    let ms;
+    if (typeof dateValue === 'number') {
+      ms = dateValue * 1000; // Razorpay Unix timestamp
+    } else {
+      ms = new Date(dateValue).getTime();
+    }
+
+    if (isNaN(ms)) return false;
+
+    const now = Date.now();
+    if (range === '30m') return (now - ms) <= 30 * 60 * 1000;
+    if (range === '24h') return (now - ms) <= 24 * 60 * 60 * 1000;
+    if (range === '7d') return (now - ms) <= 7 * 24 * 60 * 60 * 1000;
+    if (range === '30d') return (now - ms) <= 30 * 24 * 60 * 60 * 1000;
+
+    return true;
+  };
   
   // Fetch Core Data (Profiles)
   const fetchProfiles = async () => {
@@ -231,16 +258,18 @@ export default function Admin() {
 
   const candidates = profiles.filter(p => !p.is_admin && p.email !== 'admin.tarmac@gmail.com');
 
+  // Date-filtered candidates for analytics
+  const filteredCandidates = candidates.filter(p => isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
+
   // Metrics for Analytics Tab
-  const totalUsers = candidates.length;
-  const proUsersCount = candidates.filter(p => p.is_paid).length;
-  const totalVisits = candidates.reduce((acc, p) => acc + (p.visits || 0), 0);
-  const totalPaymentAttempts = candidates.reduce((acc, p) => acc + (p.payment_attempts || 0), 0);
+  const totalUsers = filteredCandidates.length;
+  const proUsersCount = filteredCandidates.filter(p => p.is_paid).length;
+  const totalVisits = filteredCandidates.reduce((acc, p) => acc + (p.visits || 0), 0);
+  const totalPaymentAttempts = filteredCandidates.reduce((acc, p) => acc + (p.payment_attempts || 0), 0);
 
   // Copy helper
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
-    // Visual feedback could be added via a toast, but keeping it simple
   };
 
   // Send Email Handler
@@ -279,12 +308,30 @@ export default function Admin() {
     }
   };
 
+  // Extract Roles/Courses dynamically to build segmentation controls
+  const availableRoles = Array.from(
+    new Set(
+      candidates
+        .map(p => p.role ? p.role.trim() : '')
+        .filter(r => r !== '' && r.toLowerCase() !== 'undefined' && r.toLowerCase() !== 'null')
+    )
+  ).sort();
+
+  const standardRoles = ['Solutions Engineer', 'Technical Account Manager', 'Customer Success Engineer', 'Software Engineer'];
+  const allUniqueRoles = Array.from(new Set([...availableRoles, ...standardRoles]));
+
+  // Funnel candidates based on date filter + selected role filter
+  const funnelCandidates = filteredCandidates.filter(p => {
+    if (selectedRoleFilter === 'all') return true;
+    return p.role && p.role.trim().toLowerCase() === selectedRoleFilter.toLowerCase();
+  });
+
   // Analytics Tracking Parsing (Funnel)
   const funnelMetrics = {
     hero: 0, dashboard: 0, questions: 0, mock: 0, companies: 0, resources: 0, pricing: 0
   };
 
-  candidates.forEach(p => {
+  funnelCandidates.forEach(p => {
     let hasHero = false, hasDash = false, hasQ = false, hasMock = false, hasComp = false, hasRes = false, hasPrice = false;
     (p.journey || []).forEach(e => {
       if (e.type !== 'page_view') return;
@@ -317,7 +364,7 @@ export default function Admin() {
     { name: 'Pricing', users: funnelMetrics.pricing },
   ];
 
-  // Generate mock chart data based on real profiles
+  // Generate chart data based on filtered candidate visits
   const chartData = [
     { name: 'Mon', visits: totalVisits > 0 ? Math.floor(totalVisits * 0.1) : 0, signups: 0 },
     { name: 'Tue', visits: totalVisits > 0 ? Math.floor(totalVisits * 0.15) : 0, signups: 1 },
@@ -328,13 +375,23 @@ export default function Admin() {
     { name: 'Sun', visits: totalVisits > 0 ? Math.floor(totalVisits * 0.15) : 0, signups: totalUsers > 3 ? totalUsers - 3 : totalUsers },
   ];
 
+  // Compile registration & conversion statistics for each Role/Course
+  const roleComparisonData = allUniqueRoles.map(role => {
+    const roleCandidates = filteredCandidates.filter(p => p.role && p.role.trim().toLowerCase() === role.toLowerCase());
+    const signups = roleCandidates.length;
+    const pro = roleCandidates.filter(p => p.is_paid).length;
+    const rate = signups > 0 ? Math.round((pro / signups) * 100) : 0;
+    return { role, signups, pro, rate };
+  }).filter(d => d.signups > 0 || d.pro > 0 || standardRoles.includes(d.role));
+
   const filteredProfiles = candidates.filter(p => {
     const searchMatch = (p.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                         (p.phone || '').includes(searchTerm);
     const statusMatch = statusFilter === 'all' || 
                         (statusFilter === 'pro' && p.is_paid) || 
                         (statusFilter === 'free' && !p.is_paid);
-    return searchMatch && statusMatch;
+    const dateMatch = isWithinDateRange(p.last_active_date || p.created_at, dateFilter);
+    return searchMatch && statusMatch && dateMatch;
   });
 
   // Run Database Backfill & Repair Utility
@@ -380,7 +437,7 @@ export default function Admin() {
           <Users size={18} /> Candidate Details
         </button>
         <button className={`nav-btn ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>
-          <CreditCard size={18} /> Payment Links
+          <CreditCard size={18} /> Payments Management
         </button>
         <button className={`nav-btn ${activeTab === 'retargeting' ? 'active' : ''}`} onClick={() => setActiveTab('retargeting')}>
           <Mail size={18} /> Retargeting
@@ -402,9 +459,32 @@ export default function Admin() {
           <h2>Analytics Overview</h2>
           <p>High-level metrics and exploration trends.</p>
         </div>
-        <button className="btn-sync" onClick={fetchProfiles}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <select 
+            value={dateFilter} 
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="filter-select"
+            style={{ 
+              padding: '0.5rem 1rem', 
+              background: 'var(--surface-2)', 
+              color: 'var(--text-primary)', 
+              border: '1px solid var(--border)', 
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.85rem'
+            }}
+          >
+            <option value="all">All Time</option>
+            <option value="30m">Last 30 Minutes</option>
+            <option value="24h">Last 24 Hours</option>
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days (1 Month)</option>
+          </select>
+          <button className="btn-sync" onClick={fetchProfiles}>
+            <RefreshCw size={16} className={loading ? 'spin' : ''} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="admin-stats-grid">
@@ -456,7 +536,29 @@ export default function Admin() {
         </div>
         
         <div className="chart-container" style={{ background: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}>
-          <h3 style={{ marginBottom: '1rem' }}>Feature Exploration Funnel</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0 }}>Feature Exploration Funnel</h3>
+            <select 
+              value={selectedRoleFilter} 
+              onChange={(e) => setSelectedRoleFilter(e.target.value)}
+              style={{
+                background: 'var(--surface-3)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.35rem 0.75rem',
+                color: 'var(--text-primary)',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">All Roles & Courses</option>
+              {allUniqueRoles.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </div>
+          
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem' }}>
             {funnelChartData.map(item => (
               <div key={item.name} className="stat-card" style={{ padding: '1.25rem', flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
@@ -468,6 +570,46 @@ export default function Admin() {
           </div>
         </div>
       </div>
+
+      {/* Role & Course Performance Analysis */}
+      <div className="chart-container" style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
+        <h3 style={{ marginBottom: '1rem' }}>Conversion Rates & Signups by Role/Course</h3>
+        <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface-2)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-muted)' }}>
+                <th style={{ padding: '0.75rem 1rem' }}>Role / Course Track</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Total Signups</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Pro Users</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Conversion Rate</th>
+                <th style={{ padding: '0.75rem 1rem', width: '30%' }}>Conversion Funnel Bar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roleComparisonData.map(row => (
+                <tr key={row.role} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', color: 'var(--text-secondary)' }}>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{row.role}</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>{row.signups} candidates</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--lime-400)' }}>{row.pro} pro</td>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>{row.rate}%</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>
+                    <div style={{ width: '100%', background: 'var(--surface-3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${row.rate}%`, background: 'var(--lime-500)', height: '100%' }} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {roleComparisonData.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+                    No candidates with role data registered in this date range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 
@@ -477,6 +619,29 @@ export default function Admin() {
         <div>
           <h2>Candidate Details</h2>
           <p>Search and inspect registered users.</p>
+        </div>
+        <div>
+          <select 
+            value={dateFilter} 
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="filter-select"
+            style={{ 
+              padding: '0.5rem 1rem', 
+              background: 'var(--surface-2)', 
+              color: 'var(--text-primary)', 
+              border: '1px solid var(--border)', 
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.85rem'
+            }}
+          >
+            <option value="all">All Time</option>
+            <option value="30m">Last 30 Minutes</option>
+            <option value="24h">Last 24 Hours</option>
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days (1 Month)</option>
+          </select>
         </div>
       </div>
 
@@ -556,8 +721,9 @@ export default function Admin() {
   );
 
   const renderPayments = () => {
-    const droppedCandidates = candidates.filter(p => p.payment_attempts > 0 && !p.is_paid);
-    const otherFreeCandidates = candidates.filter(p => p.payment_attempts === 0 && !p.is_paid);
+    const droppedCandidates = candidates.filter(p => p.payment_attempts > 0 && !p.is_paid && isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
+    const otherFreeCandidates = candidates.filter(p => p.payment_attempts === 0 && !p.is_paid && isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
+    const filteredPayments = payments.filter(txn => isWithinDateRange(txn.created_at, dateFilter));
 
     const renderCandidateRow = (c) => (
       <div key={c.id} className="recovery-card">
@@ -579,12 +745,35 @@ export default function Admin() {
       <div className="tab-content">
         <div className="tab-header">
           <div>
-            <h2>Payments & Recovery</h2>
+            <h2>Payments Management</h2>
             <p>Recent transactions and manual payment links.</p>
           </div>
-          <button className="btn-sync" onClick={fetchPayments} disabled={loadingPayments}>
-            <RefreshCw size={16} className={loadingPayments ? 'spin' : ''} /> Refresh API
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select 
+              value={dateFilter} 
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="filter-select"
+              style={{ 
+                padding: '0.5rem 1rem', 
+                background: 'var(--surface-2)', 
+                color: 'var(--text-primary)', 
+                border: '1px solid var(--border)', 
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.85rem'
+              }}
+            >
+              <option value="all">All Time</option>
+              <option value="30m">Last 30 Minutes</option>
+              <option value="24h">Last 24 Hours</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days (1 Month)</option>
+            </select>
+            <button className="btn-sync" onClick={fetchPayments} disabled={loadingPayments}>
+              <RefreshCw size={16} className={loadingPayments ? 'spin' : ''} /> Refresh API
+            </button>
+          </div>
         </div>
 
         <div className="payments-layout">
@@ -618,11 +807,11 @@ export default function Admin() {
             <h3>Recent Razorpay Transactions</h3>
             {loadingPayments ? (
               <div className="empty-state"><RefreshCw className="spin" /> Loading from Razorpay...</div>
-            ) : payments.length === 0 ? (
+            ) : filteredPayments.length === 0 ? (
               <div className="empty-state">No recent payments found.</div>
             ) : (
               <div className="transactions-list">
-                {payments.map(txn => (
+                {filteredPayments.map(txn => (
                   <div key={txn.id} className="txn-card">
                     <div className="txn-header">
                       <span className="txn-amount">₹{txn.amount / 100}</span>
@@ -687,8 +876,9 @@ export default function Admin() {
                           (log.order_id || '').toLowerCase().includes(webhookSearchTerm.toLowerCase());
 
       const eventMatch = webhookEventFilter === 'all' || log.event_type === webhookEventFilter;
+      const dateMatch = isWithinDateRange(log.created_at, dateFilter);
 
-      return searchMatch && eventMatch;
+      return searchMatch && eventMatch && dateMatch;
     });
 
     return (
@@ -698,9 +888,32 @@ export default function Admin() {
             <h2>Webhook Monitoring</h2>
             <p>Real-time stream of events from Razorpay.</p>
           </div>
-          <button className="btn-sync" onClick={fetchWebhooks} disabled={loadingWebhooks}>
-            <RefreshCw size={16} className={loadingWebhooks ? 'spin' : ''} /> Refresh Logs
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select 
+              value={dateFilter} 
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="filter-select"
+              style={{ 
+                padding: '0.5rem 1rem', 
+                background: 'var(--surface-2)', 
+                color: 'var(--text-primary)', 
+                border: '1px solid var(--border)', 
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.85rem'
+              }}
+            >
+              <option value="all">All Time</option>
+              <option value="30m">Last 30 Minutes</option>
+              <option value="24h">Last 24 Hours</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days (1 Month)</option>
+            </select>
+            <button className="btn-sync" onClick={fetchWebhooks} disabled={loadingWebhooks}>
+              <RefreshCw size={16} className={loadingWebhooks ? 'spin' : ''} /> Refresh Logs
+            </button>
+          </div>
         </div>
 
         {/* Webhook Filters */}
@@ -819,12 +1032,12 @@ export default function Admin() {
   };
 
   const renderRetargeting = () => {
-    // Determine the filtered candidates based on the selected segment
-    let segmentedCandidates = candidates;
+    // Determine the filtered candidates based on the selected segment and date filter
+    let segmentedCandidates = candidates.filter(p => isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
     
     if (retargetSegment === 'preauth') {
       segmentedCandidates = leads
-        .filter(lead => lead.email !== 'admin.tarmac@gmail.com')
+        .filter(lead => lead.email !== 'admin.tarmac@gmail.com' && isWithinDateRange(lead.created_at, dateFilter))
         .map(lead => ({
           id: lead.id,
           full_name: 'Anonymous (Pre-Auth)',
@@ -836,16 +1049,17 @@ export default function Admin() {
           is_preauth: true
         }));
     } else if (retargetSegment === 'dropped') {
-      segmentedCandidates = candidates.filter(p => p.payment_attempts > 0 && !p.is_paid);
+      segmentedCandidates = candidates.filter(p => p.payment_attempts > 0 && !p.is_paid && isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
     } else if (retargetSegment === 'free') {
-      segmentedCandidates = candidates.filter(p => p.payment_attempts === 0 && !p.is_paid);
+      segmentedCandidates = candidates.filter(p => p.payment_attempts === 0 && !p.is_paid && isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
     } else if (retargetSegment === 'no_contact') {
-      segmentedCandidates = candidates.filter(p => !p.phone && !p.email);
+      segmentedCandidates = candidates.filter(p => !p.phone && !p.email && isWithinDateRange(p.last_active_date || p.created_at, dateFilter));
     } else if (retargetSegment !== 'all') {
       // Filter by journey path
       const targetPath = retargetSegment; 
       segmentedCandidates = candidates.filter(p => {
         if (p.is_paid) return false; // Usually we only retarget free users
+        if (!isWithinDateRange(p.last_active_date || p.created_at, dateFilter)) return false;
         let explored = false;
         (p.journey || []).forEach(e => {
           if (e.type === 'page_view' && (e.path || '').includes(targetPath)) {
@@ -895,23 +1109,55 @@ export default function Admin() {
             <h2>Behavioral Retargeting</h2>
             <p>Target specific segments based on their exploration behavior.</p>
           </div>
-          <select 
-            className="filter-select" 
-            value={retargetSegment} 
-            onChange={(e) => setRetargetSegment(e.target.value)}
-            style={{ padding: '0.5rem', background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
-          >
-            <option value="all">All Profiles</option>
-            <option value="preauth">Pre-Auth Leads (Dropped at Signup)</option>
-            <option value="free">All Free Users</option>
-            <option value="dropped">Dropped at Checkout (High Intent)</option>
-            <option value="no_contact">⚠️ Missing Contact Info</option>
-            <option value="/pricing">Viewed Pricing Page</option>
-            <option value="/questions">Explored Question Bank</option>
-            <option value="/mock">Explored Mock Interviews</option>
-            <option value="/companies">Explored Companies</option>
-            <option value="/resources">Explored Resources</option>
-          </select>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select 
+              value={dateFilter} 
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="filter-select"
+              style={{ 
+                padding: '0.5rem 1rem', 
+                background: 'var(--surface-2)', 
+                color: 'var(--text-primary)', 
+                border: '1px solid var(--border)', 
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.85rem'
+              }}
+            >
+              <option value="all">All Time</option>
+              <option value="30m">Last 30 Minutes</option>
+              <option value="24h">Last 24 Hours</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days (1 Month)</option>
+            </select>
+            <select 
+              className="filter-select" 
+              value={retargetSegment} 
+              onChange={(e) => setRetargetSegment(e.target.value)}
+              style={{ 
+                padding: '0.5rem 1rem', 
+                background: 'var(--surface-2)', 
+                color: 'var(--text-primary)', 
+                border: '1px solid var(--border)', 
+                borderRadius: 'var(--radius-sm)',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">All Profiles</option>
+              <option value="preauth">Pre-Auth Leads (Dropped at Signup)</option>
+              <option value="free">All Free Users</option>
+              <option value="dropped">Dropped at Checkout (High Intent)</option>
+              <option value="no_contact">⚠️ Missing Contact Info</option>
+              <option value="/pricing">Viewed Pricing Page</option>
+              <option value="/questions">Explored Question Bank</option>
+              <option value="/mock">Explored Mock Interviews</option>
+              <option value="/companies">Explored Companies</option>
+              <option value="/resources">Explored Resources</option>
+            </select>
+          </div>
         </div>
         
         <div className="settings-card" style={{ borderLeft: '4px solid var(--lime-500)' }}>
