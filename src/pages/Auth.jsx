@@ -179,7 +179,7 @@ export default function Auth() {
           </p>
         </div>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form" onSubmit={handleSubmit} autoComplete="off">
           {tab === 'signup' && (
             <>
               <div className="form-group">
@@ -188,6 +188,7 @@ export default function Auth() {
                   type="text" className="form-input" placeholder="Arjun Sharma"
                   value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   required autoFocus={tab === 'signup'}
+                  autoComplete="off"
                 />
               </div>
               {!isPhoneCaptured && (
@@ -198,6 +199,7 @@ export default function Auth() {
                       type="tel" className="form-input" placeholder="+91 98765 43210"
                       value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                       required
+                      autoComplete="off"
                     />
                   </div>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
@@ -213,6 +215,7 @@ export default function Auth() {
               type="email" className="form-input" placeholder="you@email.com"
               value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               required autoFocus={tab === 'login'}
+              autoComplete="off"
             />
             {form.email.trim().toLowerCase() === 'admin.tarmac@gmail.com' && (
               <div className="admin-detection-badge">
@@ -227,6 +230,7 @@ export default function Auth() {
                 type={showPw ? 'text' : 'password'} className="form-input" placeholder="Min. 6 characters"
                 value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                 required minLength={6}
+                autoComplete="new-password"
               />
               <button type="button" className="pw-toggle" onClick={() => setShowPw(s => !s)}>
                 {showPw ? <EyeOff size={17} /> : <Eye size={17} />}

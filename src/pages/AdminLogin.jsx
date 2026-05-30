@@ -84,7 +84,7 @@ export default function AdminLogin() {
           </p>
         </div>
 
-        <form className="admin-login-form" onSubmit={handleSubmit}>
+        <form className="admin-login-form" onSubmit={handleSubmit} autoComplete="off">
           <div className="form-group">
             <label className="form-label">Admin Email</label>
             <input
@@ -96,6 +96,7 @@ export default function AdminLogin() {
               required
               autoFocus
               disabled={loading}
+              autoComplete="off"
             />
           </div>
 
@@ -110,6 +111,7 @@ export default function AdminLogin() {
                 onChange={e => setPassword(e.target.value)}
                 required
                 disabled={loading}
+                autoComplete="new-password"
               />
               <button
                 type="button"
