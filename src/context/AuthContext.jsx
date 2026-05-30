@@ -66,6 +66,8 @@ export function AuthProvider({ children }) {
         const newProfile = {
           id: userObj.id,
           full_name: fullName,
+          email: userObj.email || null,   // <-- write email into dedicated column
+          phone: null,
           is_paid: false,
           streak_count: 0,
           last_active_date: null,
@@ -83,6 +85,15 @@ export function AuthProvider({ children }) {
         }
         return insertedData;
       }
+
+      // Ensure email column is always synced with auth (backfill in case it was missed)
+      if (!data.email && userObj.email) {
+        supabase.from('profiles').update({ email: userObj.email }).eq('id', userObj.id).then(() => {
+          console.log('Backfilled email column for user', userObj.id);
+        });
+        return { ...data, email: userObj.email };
+      }
+
       return data;
     } catch (err) {
       console.error('Profile fetch error:', err);
@@ -126,18 +137,13 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Sync phone if we captured one and it's missing from DB OR missing from local state
-    if (capturedPhone && (!stored.phone || history.phone !== capturedPhone)) {
-      stored.phone = capturedPhone;
-      saveExtendedDetails(sessionUser.id, stored);
-      setExtendedDetails({ ...stored }); // trigger re-render with new phone
-      
+    // Sync phone: prefer the dedicated profiles.phone column, fall back to captured
+    const dbPhone = userProfile?.phone || '';
+    if (capturedPhone && !dbPhone) {
+      // Write phone into the dedicated column directly
       try {
-        history.phone = capturedPhone;
-        await supabase.from('profiles').update({ streak_history: history }).eq('id', sessionUser.id);
-        
-        // Update local profile state
-        setProfile(prev => prev ? { ...prev, streak_history: history } : prev);
+        await supabase.from('profiles').update({ phone: capturedPhone }).eq('id', sessionUser.id);
+        setProfile(prev => prev ? { ...prev, phone: capturedPhone } : prev);
       } catch (err) {
         console.error('Failed to sync captured phone:', err);
       }
@@ -311,15 +317,21 @@ export function AuthProvider({ children }) {
     if (metadata.role     !== undefined) updatedHistoryObj.role     = String(metadata.role     ?? '');
     if (metadata.linkedin !== undefined) updatedHistoryObj.linkedin = String(metadata.linkedin ?? '');
 
-    // 3. Write back to the profiles table
-    const profileUpdates = { streak_history: updatedHistoryObj };
+    // 3. Write phone to the DEDICATED profiles.phone column (not JSONB)
+    const profileUpdates = {};
     if (metadata.full_name !== undefined) {
       profileUpdates.full_name = String(metadata.full_name ?? '');
     }
+    if (metadata.phone !== undefined) {
+      profileUpdates.phone = String(metadata.phone ?? '');
+    }
+
+    // Also keep streak_history in sync for analytics continuity (minus phone/contact fields)
+    const analyticsUpdates = { streak_history: updatedHistoryObj };
 
     const { error: profileError } = await supabase
       .from('profiles')
-      .update(profileUpdates)
+      .update({ ...profileUpdates, ...analyticsUpdates })
       .eq('id', currentUserId);
 
     if (profileError) {
@@ -390,8 +402,8 @@ export function AuthProvider({ children }) {
       email: user.email,
       name: profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0],
       avatar: user.user_metadata?.avatar_url,
-      // Extended details: localStorage takes priority, then auth metadata
-      phone: extendedDetails.phone ?? user.user_metadata?.phone ?? '',
+      // Phone: dedicated column takes priority, then localStorage fallback
+      phone: profile?.phone || extendedDetails.phone || user.user_metadata?.phone || '',
       company: extendedDetails.company ?? user.user_metadata?.company ?? '',
       role: extendedDetails.role ?? user.user_metadata?.role ?? '',
       linkedin: extendedDetails.linkedin ?? user.user_metadata?.linkedin ?? '',

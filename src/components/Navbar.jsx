@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, BarChart2, Building2, Library, Play, Menu, X, Sun, Moon } from 'lucide-react';
+import { BookOpen, BarChart2, Building2, Library, Play, Menu, X, Sun, Moon, Shield } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import './Navbar.css';
+
+const ADMIN_EMAIL = 'admin.tarmac@gmail.com';
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard', icon: BarChart2 },
@@ -20,6 +22,8 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  const isAdmin = user?.email === ADMIN_EMAIL || localStorage.getItem('tarmac_admin_override') === 'true';
+
   const handleLogout = () => { 
     logout(); 
     window.location.href = '/'; 
@@ -33,7 +37,7 @@ export default function Navbar() {
           <span>Tar<span className="logo-accent">mac</span></span>
         </Link>
 
-        {user && (
+        {user && !isAdmin && (
           <div className={`navbar-links ${menuOpen ? 'open' : ''}`}>
             {navLinks.map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={() => setMenuOpen(false)}>
@@ -41,6 +45,14 @@ export default function Navbar() {
                 <span>{label}</span>
               </NavLink>
             ))}
+          </div>
+        )}
+        {user && isAdmin && (
+          <div className={`navbar-links ${menuOpen ? 'open' : ''}`}>
+            <NavLink to="/admin" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={() => setMenuOpen(false)}>
+              <Shield size={16} />
+              <span>Admin Console</span>
+            </NavLink>
           </div>
         )}
 
@@ -66,19 +78,22 @@ export default function Navbar() {
                     <span className="dropdown-name">{user.name}</span>
                     <span className="dropdown-email">{user.email}</span>
                   </div>
-                  {!isPaid && (
-                    <Link to="/pricing" className="dropdown-upgrade" onClick={() => setDropdownOpen(false)}>
-                      ⚡ Upgrade to Pro
-                    </Link>
-                  )}
-                  {((user?.email === 'mitra.ari99@gmail.com') || (localStorage.getItem('tarmac_admin_override') === 'true')) && (
+                  {isAdmin ? (
                     <Link to="/admin" className="dropdown-link admin-link-accent" onClick={() => setDropdownOpen(false)}>
                       🛡️ Admin Console
                     </Link>
+                  ) : (
+                    <>
+                      {!isPaid && (
+                        <Link to="/pricing" className="dropdown-upgrade" onClick={() => setDropdownOpen(false)}>
+                          ⚡ Upgrade to Pro
+                        </Link>
+                      )}
+                      <Link to="/account" className="dropdown-link" onClick={() => setDropdownOpen(false)}>
+                        Account Settings
+                      </Link>
+                    </>
                   )}
-                  <Link to="/account" className="dropdown-link" onClick={() => setDropdownOpen(false)}>
-                    Account Settings
-                  </Link>
                   <button className="dropdown-logout" onClick={handleLogout}>Sign Out</button>
                 </div>
               )}

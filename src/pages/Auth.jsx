@@ -33,9 +33,13 @@ export default function Auth() {
     setSuccessMsg('');
   };
 
-  const captureLead = async (phoneStr, sourceStr) => {
+  const captureLead = async (phoneStr, sourceStr, emailStr = null) => {
     try {
-      await supabase.from('leads').insert([{ phone: phoneStr, source: sourceStr }]);
+      await supabase.from('leads').insert([{ 
+        phone: phoneStr, 
+        source: sourceStr,
+        email: emailStr || null
+      }]);
       localStorage.setItem('tarmac_phone_captured', 'true');
       localStorage.setItem('tarmac_captured_phone_number', phoneStr);
     } catch (err) {
@@ -66,7 +70,8 @@ export default function Auth() {
     }
     setShowPhoneModal(false);
     setLoading(true);
-    await captureLead(capturePhone, 'google_oauth_intercept');
+    // Also capture the email field value if the user typed it in the form
+    await captureLead(capturePhone, 'google_oauth_intercept', form.email || null);
     try {
       await loginWithGoogle();
     } catch (err) {
@@ -90,7 +95,7 @@ export default function Auth() {
         
         // Capture lead before auth if not already captured
         if (!isPhoneCaptured) {
-          await captureLead(form.phone, 'email_signup');
+          await captureLead(form.phone, 'email_signup', form.email);
         }
         
         const signUpData = await signup(form.email, form.name.trim(), form.password);
@@ -98,13 +103,16 @@ export default function Auth() {
         if (!signUpData?.session) {
           setSuccessMsg('Account created successfully! Please check your inbox for a confirmation link to activate your account.');
         } else {
-          // Immediately save phone to user profile using context
-          if (!isPhoneCaptured && form.phone) {
+          // Write phone to profiles.phone column directly (clean architecture)
+          if (form.phone && signUpData?.user?.id) {
             try {
-              const extendedDetails = JSON.parse(localStorage.getItem(`tarmac_extended_${signUpData.user.id}`) || '{}');
-              extendedDetails.phone = form.phone;
-              localStorage.setItem(`tarmac_extended_${signUpData.user.id}`, JSON.stringify(extendedDetails));
-            } catch(e) {}
+              await supabase
+                .from('profiles')
+                .update({ phone: form.phone })
+                .eq('id', signUpData.user.id);
+            } catch(e) {
+              console.warn('Could not write phone to profiles.phone on signup:', e);
+            }
           }
           navigate('/dashboard');
         }

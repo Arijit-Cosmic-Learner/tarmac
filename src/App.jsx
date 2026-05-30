@@ -15,22 +15,38 @@ import Account from './pages/Account';
 import Admin from './pages/Admin';
 import { trackPageView } from './lib/analytics';
 
+// Admin email — single source of truth
+const ADMIN_EMAIL = 'admin.tarmac@gmail.com';
+
+// Helper to check if current user is admin
+function useIsAdmin() {
+  const { user } = useAuth();
+  return user?.email === ADMIN_EMAIL || localStorage.getItem('tarmac_admin_override') === 'true';
+}
+
 // Route guard: redirect to /login if not authenticated
+// Redirect admin users away from regular app pages to /admin
 function PrivateRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
+  const isAdmin = useIsAdmin();
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh', color: 'var(--text-muted)' }}>
       Loading...
     </div>
   );
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (isAdmin) return <Navigate to="/admin" replace />;
+  return children;
 }
 
 // Route guard: redirect to /dashboard if already logged in
+// Redirect admin users to /admin instead
 function PublicRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
+  const isAdmin = useIsAdmin();
   if (loading) return null;
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
+  if (!isAuthenticated) return children;
+  return isAdmin ? <Navigate to="/admin" replace /> : <Navigate to="/dashboard" replace />;
 }
 
 // Admin route guard: check for admin credentials
@@ -52,11 +68,11 @@ function AdminRoute({ children }) {
   );
 
   const isAdmin = isAuthenticated && (
-    user?.email === 'mitra.ari99@gmail.com' ||
+    user?.email === ADMIN_EMAIL ||
     localStorage.getItem('tarmac_admin_override') === 'true'
   );
 
-  return isAdmin ? children : <Navigate to="/dashboard" replace />;
+  return isAdmin ? children : <Navigate to="/" replace />;
 }
 
 export default function App() {

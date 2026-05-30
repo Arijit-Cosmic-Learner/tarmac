@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Save, Edit2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, Edit2, CheckCircle, AlertCircle, Phone } from 'lucide-react';
 import './Account.css';
 
 export default function Account() {
@@ -22,7 +22,7 @@ export default function Account() {
     if (user) {
       const initial = {
         full_name: user.name || '',
-        phone: user.phone || '',
+        phone: user.phone || '',   // Reads from profiles.phone via context
         company: user.company || '',
         role: user.role || '',
         linkedin: user.linkedin || ''
@@ -30,7 +30,7 @@ export default function Account() {
       setFormData(initial);
       originalRef.current = initial;
     }
-  }, [user?.id]); // Only re-run when user ID changes, not on every render
+  }, [user?.id]);
 
   // Whether the user has made any changes vs what's saved
   const isDirty = (
@@ -108,6 +108,21 @@ export default function Account() {
           <h1>Account Settings</h1>
           <p>Update your personal details and professional information.</p>
         </div>
+
+        {/* Nudge banner: show when phone is missing */}
+        {!formData.phone && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+            background: 'rgba(163, 230, 53, 0.08)', border: '1px solid var(--lime-500)',
+            borderRadius: '8px', padding: '0.9rem 1.25rem', marginBottom: '1.5rem'
+          }}>
+            <Phone size={18} style={{ color: 'var(--lime-500)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Add your phone number</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>Get interview alerts and exclusive discount offers directly on WhatsApp.</div>
+            </div>
+          </div>
+        )}
 
         <div className="account-card">
           <form className="account-form" onSubmit={handleSubmit}>

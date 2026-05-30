@@ -65,6 +65,7 @@ export default function Admin() {
       if (fetchError) throw fetchError;
 
       const parsedProfiles = (data || []).map(p => {
+        // Parse analytics from streak_history JSONB
         let history = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
         try {
           if (p.streak_history) {
@@ -82,7 +83,9 @@ export default function Admin() {
 
         const mappedP = {
           ...p,
-          phone: String(history.phone || ''),
+          // CLEAN: Use dedicated columns first, fall back to JSONB for old data
+          phone: p.phone || String(history.phone || ''),
+          email: p.email || '',
           company: String(history.company || ''),
           role: String(history.role || ''),
           visits: history.visits || 1,
@@ -684,6 +687,8 @@ export default function Admin() {
       segmentedCandidates = profiles.filter(p => p.payment_attempts > 0 && !p.is_paid);
     } else if (retargetSegment === 'free') {
       segmentedCandidates = profiles.filter(p => p.payment_attempts === 0 && !p.is_paid);
+    } else if (retargetSegment === 'no_contact') {
+      segmentedCandidates = profiles.filter(p => !p.phone && !p.email);
     } else if (retargetSegment !== 'all') {
       // Filter by journey path
       const targetPath = retargetSegment; 
@@ -748,6 +753,7 @@ export default function Admin() {
             <option value="preauth">Pre-Auth Leads (Dropped at Signup)</option>
             <option value="free">All Free Users</option>
             <option value="dropped">Dropped at Checkout (High Intent)</option>
+            <option value="no_contact">⚠️ Missing Contact Info</option>
             <option value="/pricing">Viewed Pricing Page</option>
             <option value="/questions">Explored Question Bank</option>
             <option value="/mock">Explored Mock Interviews</option>
@@ -818,6 +824,17 @@ export default function Admin() {
                             Manual Razorpay Link
                           </button>
                         )}
+                        {u.phone && (
+                          <a
+                            href={`https://wa.me/${u.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi ${u.full_name || 'there'}, this is Arijit from Tarmac Prep!`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-sync"
+                            style={{textDecoration: 'none', padding: '0.35rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem', background: '#25D366', color: '#fff', borderRadius: '4px'}}
+                          >
+                            <Phone size={12}/> WhatsApp
+                          </a>
+                        )}
                         <button 
                           onClick={() => openEmailModal(u, retargetSegment)} 
                           className="btn-sync" 
@@ -838,6 +855,35 @@ export default function Admin() {
         </div>
       </div>
     );
+  };
+
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState(null);
+
+  const handleAnalyticsReset = async () => {
+    if (resetConfirm !== 'RESET') {
+      setResetMsg({ type: 'error', text: 'Type RESET exactly to confirm.' });
+      return;
+    }
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      const res = await fetch('/api/admin-reset-analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmToken: 'RESET' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResetMsg({ type: 'success', text: 'All analytics and leads cleared successfully.' });
+      setResetConfirm('');
+      fetchProfiles(); // refresh data
+    } catch (err) {
+      setResetMsg({ type: 'error', text: err.message });
+    } finally {
+      setResetting(false);
+    }
   };
 
   const renderSettings = () => (
@@ -867,6 +913,53 @@ export default function Admin() {
               <span>Pending Approval</span>
             </div>
           </label>
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="settings-card" style={{ borderLeft: '4px solid #ef4444', marginTop: '1.5rem' }}>
+        <h3 style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <AlertCircle size={18} /> Danger Zone — Reset All Analytics
+        </h3>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.85rem' }}>
+          This will wipe all <strong>streak_history</strong> (visits, journeys, payment attempts) from every profile, and delete all pre-auth leads. 
+          Phone numbers and emails stored in dedicated columns will <strong>NOT</strong> be affected.
+          This action is <strong>irreversible</strong>.
+        </p>
+        {resetMsg && (
+          <div style={{ 
+            padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem',
+            background: resetMsg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+            border: `1px solid ${resetMsg.type === 'success' ? 'var(--lime-500)' : '#ef4444'}`,
+            color: resetMsg.type === 'success' ? 'var(--lime-500)' : '#ef4444',
+          }}>
+            {resetMsg.text}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={resetConfirm}
+            onChange={e => { setResetConfirm(e.target.value); setResetMsg(null); }}
+            placeholder='Type "RESET" to confirm'
+            style={{ 
+              flex: 1, minWidth: '200px', padding: '0.5rem 0.75rem', 
+              background: 'var(--surface-3)', border: '1px solid #ef4444',
+              borderRadius: '4px', color: 'var(--text-primary)', fontSize: '0.9rem'
+            }}
+          />
+          <button
+            onClick={handleAnalyticsReset}
+            disabled={resetting || resetConfirm !== 'RESET'}
+            style={{
+              padding: '0.5rem 1.25rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              background: resetting || resetConfirm !== 'RESET' ? '#555' : '#ef4444',
+              color: '#fff', fontWeight: 600, fontSize: '0.85rem',
+              opacity: resetting || resetConfirm !== 'RESET' ? 0.6 : 1
+            }}
+          >
+            {resetting ? 'Resetting...' : 'Wipe All Analytics'}
+          </button>
         </div>
       </div>
     </div>
