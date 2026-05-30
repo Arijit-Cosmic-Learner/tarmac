@@ -25,7 +25,17 @@ export default async function handler(req, res) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
   try {
-    // 1. Reset streak_history on all profiles (preserves email, phone, name, is_paid)
+    // 1. Attempt the complete candidate database sweep RPC
+    const { error: rpcErr } = await supabase.rpc('clear_candidate_data');
+
+    if (!rpcErr) {
+      console.log('Admin complete database sweep completed successfully.');
+      return res.status(200).json({ success: true, message: 'All candidate profiles, progress, leads, and webhook events cleared.' });
+    }
+
+    // 2. Fallback: If RPC fails (possibly function not created in database yet), run the legacy reset sweep
+    console.warn('RPC clear_candidate_data failed (possibly function not created yet), running fallback reset:', rpcErr.message);
+
     const { error: profilesErr } = await supabase
       .from('profiles')
       .update({
@@ -36,23 +46,22 @@ export default async function handler(req, res) {
       .neq('id', '00000000-0000-0000-0000-000000000000'); // safety: never touch guest
 
     if (profilesErr) {
-      console.error('Failed to reset profiles:', profilesErr);
-      return res.status(500).json({ error: 'Failed to reset profile analytics.' });
+      console.error('Failed fallback profile reset:', profilesErr);
+      return res.status(500).json({ error: 'Failed fallback profile reset.' });
     }
 
-    // 2. Delete all pre-auth leads
     const { error: leadsErr } = await supabase
       .from('leads')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000'); // matches all rows
 
     if (leadsErr) {
-      console.error('Failed to delete leads:', leadsErr);
-      return res.status(500).json({ error: 'Failed to clear leads table.' });
+      console.error('Failed fallback leads deletion:', leadsErr);
+      return res.status(500).json({ error: 'Failed fallback leads deletion.' });
     }
 
-    console.log('Admin analytics reset completed successfully.');
-    return res.status(200).json({ success: true, message: 'All analytics and leads cleared.' });
+    console.log('Fallback admin analytics reset completed successfully.');
+    return res.status(200).json({ success: true, message: 'All analytics and leads reset (fallback mode).' });
   } catch (err) {
     console.error('Analytics reset error:', err);
     return res.status(500).json({ error: err.message || 'Internal server error.' });
