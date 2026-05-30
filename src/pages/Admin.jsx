@@ -22,6 +22,8 @@ export default function Admin() {
   const [payments, setPayments] = useState([]);
   const [webhooks, setWebhooks] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [webhookSearchTerm, setWebhookSearchTerm] = useState('');
+  const [webhookEventFilter, setWebhookEventFilter] = useState('all');
   
   // Loading & Error States
   const [loading, setLoading] = useState(true);
@@ -617,58 +619,164 @@ export default function Admin() {
     );
   };
 
-  const renderWebhooks = () => (
-    <div className="tab-content">
-      <div className="tab-header">
-        <div>
-          <h2>Webhook Monitoring</h2>
-          <p>Real-time stream of events from Razorpay.</p>
-        </div>
-        <button className="btn-sync" onClick={fetchWebhooks} disabled={loadingWebhooks}>
-          <RefreshCw size={16} className={loadingWebhooks ? 'spin' : ''} /> Refresh Logs
-        </button>
-      </div>
+  const renderWebhooks = () => {
+    const filteredWebhooks = webhooks.filter(log => {
+      // 1. Resolve student details
+      const userProfile = profiles.find(p => p.id === log.user_id);
+      const studentName = (userProfile?.full_name || '').toLowerCase();
+      const studentEmail = (userProfile?.email || '').toLowerCase();
+      
+      const payloadEmail = (
+        log.payload?.payload?.payment?.entity?.email || 
+        log.payload?.payload?.payment_link?.entity?.customer?.email || 
+        ''
+      ).toLowerCase();
 
-      <div className="webhook-list">
-        {loadingWebhooks ? (
-          <div className="empty-state"><RefreshCw className="spin" /> Fetching logs...</div>
-        ) : webhooks.length === 0 ? (
-          <div className="empty-state">
-            <AlertCircle size={24} style={{marginBottom: '0.5rem', color: 'var(--text-muted)'}}/>
-            <p>No webhook events recorded yet.</p>
-            <p style={{fontSize: '0.8rem', marginTop: '0.5rem'}}>Ensure the <code>webhook_events</code> table is created in Supabase.</p>
+      const payloadName = (
+        log.payload?.payload?.payment?.entity?.notes?.name || 
+        log.payload?.payload?.payment_link?.entity?.customer?.name || 
+        ''
+      ).toLowerCase();
+
+      const searchMatch = webhookSearchTerm === '' ||
+                          studentName.includes(webhookSearchTerm.toLowerCase()) ||
+                          studentEmail.includes(webhookSearchTerm.toLowerCase()) ||
+                          payloadEmail.includes(webhookSearchTerm.toLowerCase()) ||
+                          payloadName.includes(webhookSearchTerm.toLowerCase()) ||
+                          (log.payment_id || '').toLowerCase().includes(webhookSearchTerm.toLowerCase()) ||
+                          (log.order_id || '').toLowerCase().includes(webhookSearchTerm.toLowerCase());
+
+      const eventMatch = webhookEventFilter === 'all' || log.event_type === webhookEventFilter;
+
+      return searchMatch && eventMatch;
+    });
+
+    return (
+      <div className="tab-content">
+        <div className="tab-header">
+          <div>
+            <h2>Webhook Monitoring</h2>
+            <p>Real-time stream of events from Razorpay.</p>
           </div>
-        ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Event Type</th>
-                <th>Payment ID</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {webhooks.map(log => (
-                <tr key={log.id}>
-                  <td className="time-col">
-                    <Clock size={12} /> {new Date(log.created_at).toLocaleString()}
-                  </td>
-                  <td><span className="event-badge">{log.event_type}</span></td>
-                  <td className="code-font">{log.payment_id || '-'}</td>
-                  <td>
-                    <span className={`status-dot ${log.status === 'received' ? 'success' : ''}`}>
-                      {log.status}
-                    </span>
-                  </td>
+          <button className="btn-sync" onClick={fetchWebhooks} disabled={loadingWebhooks}>
+            <RefreshCw size={16} className={loadingWebhooks ? 'spin' : ''} /> Refresh Logs
+          </button>
+        </div>
+
+        {/* Webhook Filters */}
+        <div className="admin-filters-card" style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="search-box" style={{ flex: 1, minWidth: '260px' }}>
+            <Search size={18} className="search-icon" />
+            <input 
+              type="text" 
+              placeholder="Search by student name, email, payment or link ID..."
+              value={webhookSearchTerm}
+              onChange={(e) => setWebhookSearchTerm(e.target.value)}
+            />
+          </div>
+          <select 
+            value={webhookEventFilter} 
+            onChange={(e) => setWebhookEventFilter(e.target.value)}
+            style={{
+              background: 'var(--surface-3)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 1rem',
+              color: 'var(--text-primary)',
+              outline: 'none',
+              minWidth: '200px',
+              fontFamily: 'var(--font-body)',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="all">All Event Types</option>
+            {Array.from(new Set(webhooks.map(w => w.event_type))).sort().map(evt => (
+              <option key={evt} value={evt}>{evt}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="webhook-list">
+          {loadingWebhooks ? (
+            <div className="empty-state"><RefreshCw className="spin" /> Fetching logs...</div>
+          ) : filteredWebhooks.length === 0 ? (
+            <div className="empty-state">
+              <AlertCircle size={24} style={{marginBottom: '0.5rem', color: 'var(--text-muted)'}}/>
+              <p>No matching webhook events found.</p>
+            </div>
+          ) : (
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Event Type</th>
+                  <th>Student / Customer</th>
+                  <th>Payment / Order / Link ID</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {filteredWebhooks.map(log => (
+                  <tr key={log.id}>
+                    <td className="time-col" style={{ verticalAlign: 'middle' }}>
+                      <Clock size={12} /> {new Date(log.created_at).toLocaleString()}
+                    </td>
+                    <td style={{ verticalAlign: 'middle' }}>
+                      <span className="event-badge" style={{ 
+                        background: log.event_type.startsWith('payment_link') ? 'rgba(99,102,241,0.15)' : 'rgba(163,230,53,0.1)',
+                        color: log.event_type.startsWith('payment_link') ? '#818cf8' : 'var(--lime-400)',
+                        border: log.event_type.startsWith('payment_link') ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(163,230,53,0.2)'
+                      }}>{log.event_type}</span>
+                    </td>
+                    <td style={{ verticalAlign: 'middle' }}>
+                      {(() => {
+                        const userProfile = profiles.find(p => p.id === log.user_id);
+                        if (userProfile) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{userProfile.full_name}</span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{userProfile.email}</span>
+                            </div>
+                          );
+                        }
+                        // Fallback to customer/notes details in payload
+                        const email = log.payload?.payload?.payment?.entity?.email || 
+                                      log.payload?.payload?.payment_link?.entity?.customer?.email;
+                        const name = log.payload?.payload?.payment?.entity?.notes?.name || 
+                                     log.payload?.payload?.payment_link?.entity?.customer?.name;
+                        
+                        if (name || email) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{name || 'Guest User'}</span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{email}</span>
+                            </div>
+                          );
+                        }
+                        return <span style={{ color: 'var(--text-muted)' }}>Guest / Unknown</span>;
+                      })()}
+                    </td>
+                    <td className="code-font" style={{ verticalAlign: 'middle', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {log.payment_id && <span>Pay: {log.payment_id}</span>}
+                        {log.order_id && <span style={{ color: 'var(--text-muted)' }}>Link/Ord: {log.order_id}</span>}
+                        {!log.payment_id && !log.order_id && <span>-</span>}
+                      </div>
+                    </td>
+                    <td style={{ verticalAlign: 'middle' }}>
+                      <span className={`status-dot ${log.status === 'received' ? 'success' : ''}`}>
+                        {log.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderRetargeting = () => {
     // Determine the filtered candidates based on the selected segment

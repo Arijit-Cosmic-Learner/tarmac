@@ -69,9 +69,15 @@ export default async function handler(req, res) {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
     const paymentEntity = eventData.payload?.payment?.entity;
-    const userId = paymentEntity?.notes?.userId;
+    const paymentLinkEntity = eventData.payload?.payment_link?.entity;
+
+    const userId = paymentEntity?.notes?.userId || 
+                   paymentEntity?.notes?.user_id || 
+                   paymentLinkEntity?.notes?.userId || 
+                   paymentLinkEntity?.notes?.user_id;
+
     const paymentId = paymentEntity?.id;
-    const orderId = paymentEntity?.order_id;
+    const orderId = paymentEntity?.order_id || paymentLinkEntity?.id || null;
 
     // Log the event to our new webhook_events table
     try {
@@ -87,19 +93,14 @@ export default async function handler(req, res) {
       console.error('Failed to log webhook event to DB:', err);
     }
 
-    // We specifically care about payment.captured
-    if (eventData.event === 'payment.captured') {
-      const paymentEntity = eventData.payload?.payment?.entity;
-      const userId = paymentEntity?.notes?.userId;
-      const paymentId = paymentEntity?.id;
-      const orderId = paymentEntity?.order_id;
-
+    // We care about payment.captured or payment_link.paid (custom payment links)
+    if (eventData.event === 'payment.captured' || eventData.event === 'payment_link.paid') {
       if (!userId) {
-        console.warn(`Payment captured (${paymentId}) but notes.userId was missing. Cannot map to user.`);
+        console.warn(`Payment event (${eventData.event}) received but notes.userId was missing. Cannot map to user.`);
         return res.status(200).json({ status: 'ignored_missing_userId' });
       }
 
-      console.log(`Upgrading user ${userId} to Pro via webhook. Payment ID: ${paymentId}, Order ID: ${orderId}`);
+      console.log(`Upgrading user ${userId} to Pro via webhook event ${eventData.event}. Payment: ${paymentId}, Order: ${orderId}`);
 
       const { error: dbError } = await supabase
         .from('profiles')
