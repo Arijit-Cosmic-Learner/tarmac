@@ -114,3 +114,38 @@
   font-family: var(--font-body);
 }
 .auth-switch-btn:hover { text-decoration: underline; }
+
+.admin-portal-link {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 500;
+}
+.admin-portal-link:hover {
+  color: var(--lime-400);
+  text-decoration: underline;
+}
+
+.admin-detection-badge {
+  background: rgba(163,230,53,0.06);
+  border: 1px dashed var(--lime-500);
+  color: var(--lime-400);
+  font-size: 0.8rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  animation: pulse-border 2s infinite ease-in-out;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(163, 230, 53, 0.4); }
+  50% { border-color: rgba(163, 230, 53, 1); }
+}
+

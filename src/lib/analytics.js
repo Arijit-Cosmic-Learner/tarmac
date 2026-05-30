@@ -55,16 +55,20 @@ export const trackPageView = async (pathname, userId) => {
 
   // Authenticated user tracking
   try {
-    // 1. Fetch current profile to merge/update
+    // 1. Fetch current profile to merge/update (including email to check for admin)
     const { data: profile, error: fetchErr } = await supabase
       .from('profiles')
-      .select('streak_history')
+      .select('streak_history, email')
       .eq('id', userId)
       .maybeSingle();
 
     if (fetchErr) {
       console.warn('Error fetching profile for tracking:', fetchErr);
       return;
+    }
+
+    if (profile?.email === 'admin.tarmac@gmail.com') {
+      return; // Skip admin tracking entirely
     }
 
     let parsed = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
@@ -122,11 +126,15 @@ export const trackEvent = async (eventName, eventData, userId) => {
   try {
     const { data: profile, error: fetchErr } = await supabase
       .from('profiles')
-      .select('streak_history')
+      .select('streak_history, email')
       .eq('id', userId)
       .maybeSingle();
 
     if (fetchErr) return;
+
+    if (profile?.email === 'admin.tarmac@gmail.com') {
+      return; // Skip admin event tracking entirely
+    }
 
     let parsed = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
     if (profile?.streak_history) {
@@ -178,11 +186,17 @@ export const syncGuestAnalytics = async (userId) => {
   try {
     const { data: profile, error: fetchErr } = await supabase
       .from('profiles')
-      .select('streak_history')
+      .select('streak_history, email')
       .eq('id', userId)
       .maybeSingle();
 
     if (fetchErr) return;
+
+    if (profile?.email === 'admin.tarmac@gmail.com') {
+      // Clear guest cache and skip syncing
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      return;
+    }
 
     let parsed = { dates: [], visits: 0, journey: [], payment_attempts: 0 };
     if (profile?.streak_history) {

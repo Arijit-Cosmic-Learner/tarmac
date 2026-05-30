@@ -362,8 +362,8 @@ export function AuthProvider({ children }) {
       };
     });
 
-    // 6. Track phone capture event
-    if (metadata.phone) {
+    // 6. Track phone capture event (skip for admin.tarmac@gmail.com)
+    if (metadata.phone && user?.email !== 'admin.tarmac@gmail.com') {
       trackEvent('phone_documented', { phone: metadata.phone }, currentUserId);
     }
 

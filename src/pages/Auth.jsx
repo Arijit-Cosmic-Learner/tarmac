@@ -53,7 +53,11 @@ export default function Auth() {
   const handleGoogleLogin = async () => {
     setError('');
     setSuccessMsg('');
-    if (!isPhoneCaptured && !capturePhone) {
+    
+    // Check if admin is trying to sign in
+    const isAdmin = form.email.trim().toLowerCase() === 'admin.tarmac@gmail.com';
+
+    if (!isAdmin && !isPhoneCaptured && !capturePhone) {
       setShowPhoneModal(true);
       return;
     }
@@ -92,19 +96,22 @@ export default function Auth() {
       if (tab === 'login') {
         const loggedInUser = await login(form.email, form.password);
         // After login, check if profile has a phone. If not, intercept and ask.
-        try {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('phone')
-            .eq('id', loggedInUser.id)
-            .maybeSingle();
-          if (!prof?.phone) {
-            setPostLoginUserId(loggedInUser.id);
-            setShowPostLoginPhone(true);
-            setLoading(false);
-            return; // don't navigate yet — wait for phone
-          }
-        } catch (_) {}
+        // Bypass completely for the admin account
+        if (loggedInUser.email !== 'admin.tarmac@gmail.com') {
+          try {
+            const { data: prof } = await supabase
+              .from('profiles')
+              .select('phone')
+              .eq('id', loggedInUser.id)
+              .maybeSingle();
+            if (!prof?.phone) {
+              setPostLoginUserId(loggedInUser.id);
+              setShowPostLoginPhone(true);
+              setLoading(false);
+              return; // don't navigate yet — wait for phone
+            }
+          } catch (_) {}
+        }
         navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }
@@ -201,6 +208,11 @@ export default function Auth() {
               value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               required autoFocus={tab === 'login'}
             />
+            {form.email.trim().toLowerCase() === 'admin.tarmac@gmail.com' && (
+              <div className="admin-detection-badge">
+                👑 Admin Access — WhatsApp prompt bypassed
+              </div>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">Password</label>
@@ -237,6 +249,12 @@ export default function Auth() {
             {tab === 'login' ? 'Sign up free' : 'Sign in'}
           </button>
         </p>
+
+        <div style={{ marginTop: '0.5rem', textAlign: 'center' }}>
+          <Link to="/admin-login" className="admin-portal-link">
+            System Administrator Portal
+          </Link>
+        </div>
       </div>
 
       {showPhoneModal && (

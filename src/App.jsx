@@ -13,6 +13,7 @@ import Resources from './pages/Resources';
 import Pricing from './pages/Pricing';
 import Account from './pages/Account';
 import Admin from './pages/Admin';
+import AdminLogin from './pages/AdminLogin';
 import { trackPageView } from './lib/analytics';
 
 // Admin email — single source of truth
@@ -81,6 +82,7 @@ export default function App() {
 
   // Automatic route tracking on location change
   useEffect(() => {
+    if (user?.email === ADMIN_EMAIL) return; // Skip admin tracking entirely
     trackPageView(location.pathname, user?.id);
   }, [location.pathname, user?.id]);
 
@@ -91,6 +93,7 @@ export default function App() {
         {/* Public */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<PublicRoute><Auth /></PublicRoute>} />
+        <Route path="/admin-login" element={<PublicRoute><AdminLogin /></PublicRoute>} />
         <Route path="/pricing" element={<Pricing />} />
 
         {/* Protected */}
