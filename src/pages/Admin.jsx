@@ -894,6 +894,33 @@ export default function Admin() {
           <p>Configure payment gateways and integrations.</p>
         </div>
       </div>
+      {/* Browser Storage Clear - Testing Utility */}
+      <div className="settings-card" style={{ borderLeft: '4px solid #a78bfa', marginBottom: '1.5rem' }}>
+        <h3 style={{ color: '#a78bfa', marginBottom: '0.5rem' }}>🧪 Testing Utility — Clear Browser Storage</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          Clears all Tarmac localStorage keys (phone flags, guest analytics, auth tokens) for <strong>this browser only</strong>. 
+          Use this to simulate a fresh user visiting the site so you can test the phone capture flow again.
+        </p>
+        <button
+          className="btn-generate"
+          style={{ background: '#a78bfa', color: '#000' }}
+          onClick={() => {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (key.startsWith('tarmac_') || key.startsWith('sb-'))) {
+                keysToRemove.push(key);
+              }
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            alert(`✅ Cleared ${keysToRemove.length} keys:\n${keysToRemove.join('\n')}\n\nReloading...`);
+            window.location.href = '/login';
+          }}
+        >
+          Clear My Browser Storage & Go to Login
+        </button>
+      </div>
+
       <div className="settings-card">
         <h3>Payment Gateway Switcher</h3>
         <p>This section is a placeholder for dynamically switching between Razorpay, Easebuzz, or Stripe.</p>

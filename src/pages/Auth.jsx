@@ -14,6 +14,9 @@ export default function Auth() {
   // Pre-Auth Lead Capture States
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [capturePhone, setCapturePhone] = useState('');
+  const [showPostLoginPhone, setShowPostLoginPhone] = useState(false);
+  const [postLoginUserId, setPostLoginUserId] = useState(null);
+  const [postLoginPhone, setPostLoginPhone] = useState('');
   
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -87,7 +90,21 @@ export default function Auth() {
     setLoading(true);
     try {
       if (tab === 'login') {
-        await login(form.email, form.password);
+        const loggedInUser = await login(form.email, form.password);
+        // After login, check if profile has a phone. If not, intercept and ask.
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('phone')
+            .eq('id', loggedInUser.id)
+            .maybeSingle();
+          if (!prof?.phone) {
+            setPostLoginUserId(loggedInUser.id);
+            setShowPostLoginPhone(true);
+            setLoading(false);
+            return; // don't navigate yet — wait for phone
+          }
+        } catch (_) {}
         navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }
@@ -250,6 +267,52 @@ export default function Auth() {
                 </button>
                 <button type="submit" className="btn-primary" style={{ flex: 1 }}>
                   Continue
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Post-Login Phone Capture Modal */}
+      {showPostLoginPhone && (
+        <div className="modal-overlay">
+          <div className="modal-content animate-slide" style={{ maxWidth: '420px', width: '90%' }}>
+            <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Welcome back! One quick thing 👋</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+              We don't have your WhatsApp number yet. Add it now to receive interview alerts and exclusive offers.
+            </p>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!postLoginPhone || postLoginPhone.length < 10) return;
+              try {
+                await supabase.from('profiles').update({ phone: postLoginPhone }).eq('id', postLoginUserId);
+                localStorage.setItem('tarmac_captured_phone_number', postLoginPhone);
+              } catch(err) {
+                console.warn('Could not save phone after login:', err);
+              }
+              setShowPostLoginPhone(false);
+              navigate('/dashboard');
+            }}>
+              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                <input
+                  type="tel"
+                  className="form-input"
+                  placeholder="+91 98765 43210"
+                  value={postLoginPhone}
+                  onChange={(e) => setPostLoginPhone(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Shield size={12} /> We promise not to spam or disturb you.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button type="button" className="btn-sync" onClick={() => { setShowPostLoginPhone(false); navigate('/dashboard'); }} style={{ flex: 1 }}>
+                  Skip for now
+                </button>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
+                  Save & Continue
                 </button>
               </div>
             </form>
