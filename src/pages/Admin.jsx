@@ -48,6 +48,9 @@ export default function Admin() {
   // Email Modal State
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' });
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState(false);
+  const [emailError, setEmailError] = useState('');
   
   // Fetch Core Data (Profiles)
   const fetchProfiles = async () => {
@@ -220,6 +223,42 @@ export default function Admin() {
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
     // Visual feedback could be added via a toast, but keeping it simple
+  };
+
+  // Send Email Handler
+  const handleSendEmail = async (e) => {
+    e.preventDefault();
+    if (!emailDraft.to) {
+      setEmailError('Please specify a recipient email address.');
+      return;
+    }
+    setSendingEmail(true);
+    setEmailError('');
+    setEmailSuccess(false);
+
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: emailDraft.to,
+          subject: emailDraft.subject,
+          body: emailDraft.body
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send email.');
+      }
+
+      setEmailSuccess(true);
+    } catch (err) {
+      console.error('Error sending email:', err);
+      setEmailError(err.message || 'An error occurred while sending the email.');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   // Analytics Tracking Parsing (Funnel)
@@ -688,6 +727,8 @@ export default function Admin() {
 
       setEmailDraft({ to: u.email || '', subject, body });
       setShowEmailModal(true);
+      setEmailSuccess(false);
+      setEmailError('');
     };
 
     return (
@@ -922,21 +963,36 @@ export default function Admin() {
       )}
       {/* Email Draft Modal */}
       {showEmailModal && (
-        <div className="modal-overlay" onClick={() => setShowEmailModal(false)}>
+        <div className="modal-overlay" onClick={() => !sendingEmail && setShowEmailModal(false)}>
           <div className="modal-content admin-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Draft Email to Candidate</h3>
-              <button className="close-btn" onClick={() => setShowEmailModal(false)}><X size={20} /></button>
+              <button className="close-btn" onClick={() => setShowEmailModal(false)} disabled={sendingEmail}><X size={20} /></button>
             </div>
             
-            <div className="admin-form" style={{ marginTop: '1rem' }}>
+            <form onSubmit={handleSendEmail} className="admin-form" style={{ marginTop: '1rem' }}>
+              {emailSuccess && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--lime-500)', color: 'var(--lime-500)', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  <CheckCircle size={16} />
+                  <span>Email sent successfully!</span>
+                </div>
+              )}
+              {emailError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  <AlertCircle size={16} />
+                  <span>{emailError}</span>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>To:</label>
                 <input 
                   type="text" 
                   value={emailDraft.to} 
                   onChange={e => setEmailDraft({...emailDraft, to: e.target.value})}
-                  placeholder="Candidate Email (optional)"
+                  placeholder="Candidate Email (required)"
+                  required
+                  disabled={sendingEmail}
                 />
               </div>
               
@@ -947,6 +1003,8 @@ export default function Admin() {
                   value={emailDraft.subject} 
                   onChange={e => setEmailDraft({...emailDraft, subject: e.target.value})}
                   placeholder="Email Subject"
+                  required
+                  disabled={sendingEmail}
                 />
               </div>
               
@@ -957,10 +1015,12 @@ export default function Admin() {
                   onChange={e => setEmailDraft({...emailDraft, body: e.target.value})}
                   rows={8}
                   style={{ fontFamily: 'inherit' }}
+                  required
+                  disabled={sendingEmail}
                 />
               </div>
 
-              <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+              <div className="modal-actions" style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
                 <button 
                   type="button" 
                   className="btn-secondary" 
@@ -968,23 +1028,33 @@ export default function Admin() {
                     handleCopy(emailDraft.body);
                     alert("Email body copied to clipboard!");
                   }}
-                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                  style={{ flex: '1 1 120px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                  disabled={sendingEmail}
                 >
                   <Copy size={16} /> Copy Body
                 </button>
                 <button 
                   type="button" 
-                  className="btn-primary" 
+                  className="btn-secondary" 
                   onClick={() => {
                     const mailtoStr = `mailto:${emailDraft.to}?subject=${encodeURIComponent(emailDraft.subject)}&body=${encodeURIComponent(emailDraft.body)}`;
                     window.location.href = mailtoStr;
                   }}
-                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                  style={{ flex: '1 1 120px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                  disabled={sendingEmail}
                 >
                   <Mail size={16} /> Open Mail Client
                 </button>
+                <button 
+                  type="submit" 
+                  className="btn-primary" 
+                  disabled={sendingEmail || !emailDraft.to}
+                  style={{ flex: '1 1 150px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', background: 'var(--lime-500)', color: '#000' }}
+                >
+                  <Mail size={16} /> {sendingEmail ? 'Sending...' : 'Send Email'}
+                </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
