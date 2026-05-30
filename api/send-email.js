@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   }
 
   // Load credentials from environment
-  const GMAIL_USER = process.env.GMAIL_USER || 'mitra.ari1997@gmail.com';
+  const GMAIL_USER = process.env.GMAIL_USER || 'admin.tarmac@gmail.com';
   const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
   if (!GMAIL_APP_PASSWORD) {
