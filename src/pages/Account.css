@@ -158,3 +158,485 @@
     padding: 1.5rem;
   }
 }
+
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Secured badge in history header ─────────────────────────────────────── */
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+.history-header svg {
+  color: var(--text-muted);
+}
+.history-header h3 {
+  flex: 1;
+}
+.history-secured-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: 20px;
+  padding: 0.25rem 0.65rem;
+  letter-spacing: 0.03em;
+}
+
+/* ─── Receipt Card ─────────────────────────────────────────────────────────── */
+.receipt-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  margin-bottom: 1rem;
+}
+.receipt-card:hover {
+  border-color: rgba(163, 230, 53, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Card Header */
+.receipt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem 0.85rem;
+}
+.receipt-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.receipt-event-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lime-400);
+  background: rgba(163, 230, 53, 0.08);
+  border: 1px solid rgba(163, 230, 53, 0.15);
+  border-radius: 20px;
+  padding: 0.18rem 0.6rem;
+  align-self: flex-start;
+}
+.receipt-desc-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.receipt-amount-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+/* Info Grid */
+.receipt-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.receipt-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1.25rem;
+  border-right: 1px solid var(--border);
+}
+.receipt-info-cell:last-child {
+  border-right: none;
+}
+.rinfo-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.rinfo-value {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.rinfo-value--highlight {
+  color: var(--lime-400);
+}
+.rinfo-value--mono {
+  font-family: monospace;
+  font-size: 0.78rem;
+}
+
+/* Card Footer */
+.receipt-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  padding: 0.7rem 1.25rem;
+}
+.receipt-ref-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+}
+.ref-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.receipt-ref-row code {
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+}
+.receipt-verified-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #34d399;
+  margin-left: auto;
+}
+
+/* Loading & Empty states */
+.billing-loading-state,
+.billing-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  gap: 0.75rem;
+}
+.billing-loading-state p,
+.billing-empty-state p {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .receipt-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .receipt-card-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .receipt-amount-block {
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 0.75rem;
+  }
+}
+
+
+
+/* Security Panel inside receipt card */
+.receipt-security-panel {
+  background: rgba(255, 255, 255, 0.015);
+  border-top: 1px dashed var(--border);
+  padding: 0.85rem 1.25rem;
+}
+
+.security-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.shield-green {
+  color: #34d399;
+}
+
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 1rem;
+}
+
+.security-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  padding-bottom: 0.25rem;
+}
+
+.security-cell--full {
+  grid-column: span 2;
+}
+
+.sec-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sec-val {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.sec-val--mono {
+  font-family: monospace;
+  font-size: 0.68rem;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
+}
+
+.valid-month-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 0.15rem;
+}
+
+/* Account Tabs Switcher */
+.account-tabs {
+  display: flex !important;
+  gap: 0.25rem !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 0.3rem !important;
+  border-radius: 12px !important;
+  margin-bottom: 2.25rem !important;
+  width: fit-content !important;
+}
+
+.account-tab-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+  padding: 0.6rem 1.25rem !important;
+  color: var(--text-muted) !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  outline: none !important;
+}
+
+.account-tab-btn:hover {
+  color: var(--text-primary) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.account-tab-btn.active {
+  color: #0a0c1b !important;
+  background: var(--lime-400) !important;
+  box-shadow: 0 4px 12px rgba(163, 230, 53, 0.2) !important;
+}
+
+.cancel-sub-btn {
+  transition: all 0.2s ease;
+}
+.cancel-sub-btn:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: #ef4444 !important;
+  transform: translateY(-1px);
+}
+
+/* Billing Summary Card Header */
+.billing-status-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 1.5rem !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding-bottom: 1.25rem !important;
+}
+
+.billing-status-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: var(--text-secondary) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.billing-icon {
+  color: var(--text-muted) !important;
+}
+
+.billing-badge {
+  padding: 0.3rem 0.85rem !important;
+  border-radius: 20px !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.billing-badge--active {
+  background: rgba(163, 230, 53, 0.08) !important;
+  border: 1px solid rgba(163, 230, 53, 0.2) !important;
+  color: var(--lime-400) !important;
+}
+
+.billing-badge--free {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+.billing-plan-info h3 {
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 0.75rem !important;
+  letter-spacing: -0.010em !important;
+}
+
+.billing-plan-detail {
+  font-size: 0.9rem !important;
+  color: var(--text-secondary) !important;
+  line-height: 1.6 !important;
+}
+
+.billing-meta-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border) !important;
+  padding: 0.75rem 1.25rem !important;
+  border-radius: 8px !important;
+  margin-top: 1.25rem !important;
+}
+
+.status-highlight {
+  color: var(--lime-400) !important;
+}
+
+/* Upgrade Premium Banner */
+.upgrade-callout-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 1.5rem !important;
+  background: linear-gradient(135deg, rgba(255, 92, 0, 0.04), rgba(255, 194, 153, 0.02)) !important;
+  border: 1px solid rgba(255, 92, 0, 0.15) !important;
+  padding: 1.25rem 1.5rem !important;
+  border-radius: 12px !important;
+  margin-top: 1.5rem !important;
+  text-align: left !important;
+}
+
+.upgrade-callout-content h4 {
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.upgrade-callout-content p {
+  font-size: 0.825rem !important;
+  color: var(--text-muted) !important;
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+
+.upgrade-action-btn {
+  flex-shrink: 0 !important;
+  font-size: 0.85rem !important;
+  padding: 0.6rem 1.25rem !important;
+  box-shadow: 0 4px 12px rgba(255, 92, 0, 0.15) !important;
+  border-radius: 8px !important;
+}
+
+@media (max-width: 580px) {
+  .upgrade-callout-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+    padding: 1.25rem !important;
+  }
+  .upgrade-action-btn {
+    width: 100% !important;
+  }
+}
+
+/* Copy Button Styling */
+.meta-value-copy {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.meta-value-copy code {
+  font-family: monospace !important;
+  font-size: 0.85rem !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  padding: 0.25rem 0.5rem !important;
+  color: var(--text-primary) !important;
+}
+
+.copy-btn-inline {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--surface-1) !important;
+  color: var(--text-muted) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  padding: 0 !important;
+}
+
+.copy-btn-inline:hover {
+  background: var(--surface-3) !important;
+  border-color: var(--border-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.green-check {
+  color: #34d399 !important;
+}
+
+

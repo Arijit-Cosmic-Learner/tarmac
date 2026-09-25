@@ -98,3 +98,81 @@
   .quick-actions-grid { grid-template-columns: 1fr 1fr; }
   .recent-questions-grid { grid-template-columns: 1fr; }
 }
+
+/* Dashboard Banners */
+.dash-banner {
+  margin-bottom: 2rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+.banner-emoji {
+  font-size: 1.75rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.banner-left h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+}
+.banner-left p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0 0 0;
+  line-height: 1.4;
+}
+.banner-expired {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+}
+.banner-expired h4 {
+  color: #f87171;
+}
+.banner-expired .banner-emoji {
+  animation: pulse-alert 2s infinite;
+}
+.banner-active.banner-pass {
+  background: rgba(163, 230, 53, 0.08) !important;
+  border: 1px solid rgba(163, 230, 53, 0.2) !important;
+}
+.banner-active.banner-sub {
+  background: rgba(59, 130, 246, 0.08) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+}
+.banner-active.banner-sub h4 {
+  color: #60a5fa;
+}
+.banner-btn {
+  font-size: 0.875rem;
+  padding: 0.5rem 1.25rem;
+  background: #ef4444 !important;
+  color: #fff !important;
+  border: none !important;
+}
+.banner-btn:hover {
+  background: #dc2626 !important;
+}
+
+@keyframes pulse-alert {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}

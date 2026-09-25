@@ -1187,6 +1187,43 @@ export const questions = [
   },
 ];
 
+// Post-process questions to inject role_tags for role-specific routing
+questions.forEach(q => {
+  if (q.id >= 1 && q.id <= 10) {
+    q.role_tags = ['PSE', 'TAM', 'Tech Support'];
+  } else if (q.id >= 11 && q.id <= 20) {
+    if ([13, 14, 15, 17, 18].includes(q.id)) {
+      q.role_tags = ['PSE', 'TAM', 'Tech Support'];
+    } else {
+      q.role_tags = ['PSE', 'TAM'];
+    }
+  } else if (q.id >= 21 && q.id <= 30) {
+    if ([22, 23, 24, 27, 28].includes(q.id)) {
+      q.role_tags = ['TAM', 'Tech Support'];
+    } else {
+      q.role_tags = ['PSE'];
+    }
+  } else if (q.id >= 31 && q.id <= 40) {
+    if ([31, 32, 33].includes(q.id)) {
+      q.role_tags = ['PSE', 'TAM', 'Tech Support'];
+    } else if ([34, 35, 36].includes(q.id)) {
+      q.role_tags = ['TAM'];
+    } else {
+      q.role_tags = ['Tech Support'];
+    }
+  } else if (q.id >= 41 && q.id <= 50) {
+    if ([43, 44, 47].includes(q.id)) {
+      q.role_tags = ['Tech Support'];
+    } else {
+      q.role_tags = ['PSE', 'TAM'];
+    }
+  }
+  
+  if (!q.role_tags) {
+    q.role_tags = ['PSE'];
+  }
+});
+
 export const FREE_QUESTION_LIMIT = 20;
 
 export const getQuestionsByCategory = (category) =>
@@ -1198,7 +1235,43 @@ export const getQuestionsByDifficulty = (difficulty) =>
 export const getQuestionsByCompany = (company) =>
   questions.filter((q) => q.company_tags.includes(company));
 
-export const isQuestionLocked = (questionId, isPaid) => {
-  if (isPaid) return false;
-  return questionId > FREE_QUESTION_LIMIT;
+export const getQuestionsForTrack = (trackId) => {
+  const roleMap = {
+    'solutions-engineer': 'PSE',
+    'pre-sales-engineer': 'PSE',
+    'technical-account-manager': 'TAM',
+    'product-support-engineer': 'Tech Support'
+  };
+  const roleTag = roleMap[trackId] || 'PSE';
+  return questions.filter(q => q.role_tags && q.role_tags.includes(roleTag));
+};
+
+export const isQuestionLocked = (questionId, isPaid, userAccessType, userAccessRole, trackId = 'solutions-engineer') => {
+  const roleMap = {
+    'solutions-engineer': 'PSE',
+    'pre-sales-engineer': 'PSE',
+    'technical-account-manager': 'TAM',
+    'product-support-engineer': 'Tech Support'
+  };
+  
+  const currentTrackTag = roleMap[trackId] || 'PSE';
+  const question = questions.find(q => q.id === questionId);
+  if (!question) return true;
+
+  // 1. If user does NOT have active paid status:
+  if (!isPaid) {
+    const trackQs = questions.filter(q => q.role_tags?.includes(currentTrackTag));
+    const idx = trackQs.findIndex(q => q.id === questionId);
+    return idx >= FREE_QUESTION_LIMIT || idx === -1;
+  }
+
+  // 2. If user is paid, check access type
+  if (userAccessType === 'role') {
+    const normalizedUserRole = roleMap[userAccessRole] || userAccessRole;
+    if (normalizedUserRole !== currentTrackTag) {
+      return true; // Locked because user is subscribed to a different role track
+    }
+  }
+
+  return false; // Unlocked
 };

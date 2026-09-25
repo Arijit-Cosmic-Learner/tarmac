@@ -8,7 +8,12 @@ import './Auth.css';
 export default function Auth() {
   const [params] = useSearchParams();
   const [tab, setTab] = useState(params.get('tab') === 'signup' ? 'signup' : 'login');
-  const [form, setForm] = useState({ email: '', name: '', password: '', phone: '' });
+  const [form, setForm] = useState({ 
+    email: '', 
+    name: '', 
+    password: '', 
+    phone: localStorage.getItem('tarmac_captured_phone_number') || '' 
+  });
   const [showPw, setShowPw] = useState(false);
   
   // Pre-Auth Lead Capture States
@@ -21,14 +26,62 @@ export default function Auth() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Background login polling state for cross-device email confirmation (desktop to mobile)
+  const [pollCredentials, setPollCredentials] = useState(null);
   const { login, signup, loginWithGoogle, isAuthenticated } = useAuth();
   
   const isPhoneCaptured = localStorage.getItem('tarmac_phone_captured') === 'true';
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (params.get('reset_test') === 'true') {
+      localStorage.clear();
+      supabase.auth.signOut().catch(() => {});
+    }
+  }, [params]);
+
+  useEffect(() => {
     if (isAuthenticated) navigate('/dashboard');
   }, [isAuthenticated, navigate]);
+
+  // Polling for confirmation status via background login attempts
+  useEffect(() => {
+    if (!pollCredentials) return;
+
+    let intervalId;
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes (60 * 5s)
+
+    const attemptBackgroundLogin = async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        setPollCredentials(null);
+        return;
+      }
+
+      try {
+        const { data, error: loginErr } = await supabase.auth.signInWithPassword({
+          email: pollCredentials.email,
+          password: pollCredentials.password
+        });
+
+        if (!loginErr && data?.session) {
+          setPollCredentials(null);
+          // trigger navigation (AuthContext handles setting state globally)
+          navigate('/dashboard');
+        }
+      } catch (err) {
+        // fail silently, user hasn't verified email yet
+      }
+    };
+
+    intervalId = setInterval(attemptBackgroundLogin, 5000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [pollCredentials, navigate]);
 
   const handleTabChange = (newTab) => {
     setTab(newTab);
@@ -121,7 +174,7 @@ export default function Auth() {
         navigate('/dashboard');
       } else {
         if (!form.name.trim()) { setError('Please enter your name'); setLoading(false); return; }
-        if (!isPhoneCaptured && !form.phone.trim()) { setError('Please enter your phone number'); setLoading(false); return; }
+        if (!form.phone.trim()) { setError('Please enter your phone number'); setLoading(false); return; }
         
         // Capture lead before auth if not already captured
         if (!isPhoneCaptured) {
@@ -132,6 +185,9 @@ export default function Auth() {
         
         if (!signUpData?.session) {
           setSuccessMsg('Account created successfully! Please check your inbox for a confirmation link to activate your account.');
+          setTab('login');
+          // Start polling using the signup credentials
+          setPollCredentials({ email: form.email, password: form.password });
         } else {
           // Write phone to profiles.phone column directly (clean architecture)
           if (form.phone && signUpData?.user?.id) {
@@ -140,6 +196,8 @@ export default function Auth() {
                 .from('profiles')
                 .update({ phone: form.phone })
                 .eq('id', signUpData.user.id);
+              localStorage.setItem('tarmac_phone_captured', 'true');
+              localStorage.setItem('tarmac_captured_phone_number', form.phone);
             } catch(e) {
               console.warn('Could not write phone to profiles.phone on signup:', e);
             }
@@ -191,22 +249,18 @@ export default function Auth() {
                   autoComplete="off"
                 />
               </div>
-              {!isPhoneCaptured && (
-                <>
-                  <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                    <label className="form-label">WhatsApp Number</label>
-                    <input
-                      type="tel" className="form-input" placeholder="+91 98765 43210"
-                      value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                      required
-                      autoComplete="off"
-                    />
-                  </div>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <Shield size={12} /> We promise not to spam or disturb you.
-                  </p>
-                </>
-              )}
+              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                <label className="form-label">WhatsApp Number</label>
+                <input
+                  type="tel" className="form-input" placeholder="+91 98765 43210"
+                  value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  required
+                  autoComplete="off"
+                />
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Shield size={12} /> We promise not to spam or disturb you.
+              </p>
             </>
           )}
           <div className="form-group">
@@ -301,6 +355,7 @@ export default function Auth() {
           </div>
         </div>
       )}
+
       {/* Post-Login Phone Capture Modal */}
       {showPostLoginPhone && (
         <div className="modal-overlay">

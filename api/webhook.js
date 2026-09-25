@@ -1,6 +1,6 @@
 // api/webhook.js — Vercel Serverless Function
-// Listens for Razorpay payment webhooks, cryptographically verifies them,
-// and marks the user's account as paid in Supabase.
+// Listens for Razorpay payment and subscription webhooks, cryptographically verifies them,
+// and manages user subscription state and manual pass durations in Supabase.
 
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -63,26 +63,27 @@ export default async function handler(req, res) {
     // Signature verified, parse payload
     const eventData = JSON.parse(rawBody.toString('utf8'));
     console.log(`Razorpay webhook verified: event = ${eventData.event}`);
-    console.log('Webhook Payload:', JSON.stringify(eventData, null, 2));
 
-    // Initialize privileged Supabase client to bypass Row Level Security
+    // Initialize privileged Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
     const paymentEntity = eventData.payload?.payment?.entity;
     const paymentLinkEntity = eventData.payload?.payment_link?.entity;
+    const subscriptionEntity = eventData.payload?.subscription?.entity;
 
     let userId = paymentEntity?.notes?.userId || 
-                   paymentEntity?.notes?.user_id || 
-                   paymentLinkEntity?.notes?.userId || 
-                   paymentLinkEntity?.notes?.user_id;
+                 paymentEntity?.notes?.user_id || 
+                 paymentLinkEntity?.notes?.userId || 
+                 paymentLinkEntity?.notes?.user_id ||
+                 subscriptionEntity?.notes?.userId ||
+                 subscriptionEntity?.notes?.user_id;
 
     // Proactive matching: if userId is missing, try matching by email/phone in the database
     if (!userId) {
-      const email = (paymentEntity?.email || paymentLinkEntity?.customer?.email || '').trim().toLowerCase();
-      const contact = (paymentEntity?.contact || paymentLinkEntity?.customer?.contact || '').trim();
+      const email = (paymentEntity?.email || paymentLinkEntity?.customer?.email || subscriptionEntity?.customer?.email || '').trim().toLowerCase();
+      const contact = (paymentEntity?.contact || paymentLinkEntity?.customer?.contact || subscriptionEntity?.customer?.contact || '').trim();
 
       if (email || contact) {
-        // Query profiles to find a match
         let matchedProfile = null;
         if (email) {
           const { data } = await supabase
@@ -119,9 +120,9 @@ export default async function handler(req, res) {
     }
 
     const paymentId = paymentEntity?.id;
-    const orderId = paymentEntity?.order_id || paymentLinkEntity?.id || null;
+    const orderId = paymentEntity?.order_id || paymentLinkEntity?.id || subscriptionEntity?.id || null;
 
-    // Log the event to our new webhook_events table
+    // Log the event to webhook_events table
     try {
       await supabase.from('webhook_events').insert({
         event_type: eventData.event,
@@ -135,32 +136,105 @@ export default async function handler(req, res) {
       console.error('Failed to log webhook event to DB:', err);
     }
 
-    // We care about payment.captured or payment_link.paid (custom payment links)
+    if (!userId) {
+      console.warn(`Webhook event (${eventData.event}) received but userId was missing. Cannot map user profile.`);
+      return res.status(200).json({ status: 'ignored_missing_userId' });
+    }
+
+    // ── Case A: Standard One-Time Payment Captured (20-day pass) ────────────
     if (eventData.event === 'payment.captured' || eventData.event === 'payment_link.paid') {
-      if (!userId) {
-        console.warn(`Payment event (${eventData.event}) received but notes.userId was missing. Cannot map to user.`);
-        return res.status(200).json({ status: 'ignored_missing_userId' });
+      const isSub = !!paymentEntity?.subscription_id || paymentEntity?.notes?.purchaseType === 'subscription';
+      
+      // If it's a subscription payment, let subscription.activated/charged handle it to prevent conflict
+      if (isSub) {
+        console.log(`Payment is associated with subscription. Skipping pass upgrade.`);
+        return res.status(200).json({ status: 'ignored_subscription_payment' });
       }
 
-      console.log(`Upgrading user ${userId} to Pro via webhook event ${eventData.event}. Payment: ${paymentId}, Order: ${orderId}`);
+      const accessType = paymentEntity?.notes?.accessType || 'all';
+      const accessRole = paymentEntity?.notes?.accessRole || 'all';
+
+      console.log(`Upgrading user ${userId} to Pro Pass (${accessType}/${accessRole}) via ${eventData.event}.`);
 
       const { error: dbError } = await supabase
         .from('profiles')
         .update({
           is_paid: true,
+          access_type: accessType,
+          access_role: accessRole,
+          pass_created_at: new Date().toISOString(),
+          paid_until: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', userId);
 
       if (dbError) {
-        console.error('Failed to update profile to is_paid=true in Supabase:', dbError);
+        console.error('Failed to update profile to pass access in Supabase:', dbError);
         return res.status(500).json({ error: 'Failed to update user profile' });
       }
 
-      console.log(`User ${userId} successfully upgraded to Pro via Webhook.`);
+      console.log(`User ${userId} successfully upgraded to Pro Pass via Webhook.`);
     }
 
-    // Always respond with 200 OK to Razorpay to prevent webhook retries
+    // ── Case B: Subscription Activated / Charged ───────────────────────────
+    else if (eventData.event === 'subscription.activated' || eventData.event === 'subscription.charged') {
+      const accessType = subscriptionEntity?.notes?.accessType || 'all';
+      const accessRole = subscriptionEntity?.notes?.accessRole || 'all';
+      const subStatus = subscriptionEntity?.status || 'active';
+      const paidUntil = subscriptionEntity?.current_end 
+        ? new Date(subscriptionEntity.current_end * 1000).toISOString()
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      console.log(`Upgrading user ${userId} to Subscription (${accessType}/${accessRole}) status: ${subStatus}. Valid until: ${paidUntil}`);
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({
+          is_paid: true,
+          access_type: accessType,
+          access_role: accessRole,
+          razorpay_subscription_id: subscriptionEntity.id,
+          subscription_status: subStatus,
+          paid_until: paidUntil,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (dbError) {
+        console.error('Failed to update profile to subscription access in Supabase:', dbError);
+        return res.status(500).json({ error: 'Failed to update user profile' });
+      }
+
+      console.log(`User ${userId} subscription synced successfully.`);
+    }
+
+    // ── Case C: Subscription Cancelled / Paused / Halted ───────────────────
+    else if (
+      eventData.event === 'subscription.paused' || 
+      eventData.event === 'subscription.resumed' || 
+      eventData.event === 'subscription.halted' || 
+      eventData.event === 'subscription.cancelled' || 
+      eventData.event === 'subscription.completed'
+    ) {
+      const subStatus = subscriptionEntity?.status || 'cancelled';
+      console.log(`Updating user ${userId} subscription status to: ${subStatus}.`);
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({
+          subscription_status: subStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (dbError) {
+        console.error('Failed to update profile subscription status in Supabase:', dbError);
+        return res.status(500).json({ error: 'Failed to update subscription status' });
+      }
+
+      console.log(`User ${userId} subscription status updated to ${subStatus}.`);
+    }
+
     return res.status(200).json({ status: 'ok' });
   } catch (err) {
     console.error('Webhook processing error:', err);

@@ -28,7 +28,7 @@ function useIsAdmin() {
 // Route guard: redirect to /login if not authenticated
 // Redirect admin users away from regular app pages to /admin
 function PrivateRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, mustRedirectToPricing } = useAuth();
   const isAdmin = useIsAdmin();
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh', color: 'var(--text-muted)' }}>
@@ -37,6 +37,7 @@ function PrivateRoute({ children }) {
   );
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (isAdmin) return <Navigate to="/admin" replace />;
+  if (mustRedirectToPricing) return <Navigate to="/pricing?reason=expired" replace />;
   return children;
 }
 
@@ -95,8 +96,8 @@ export default function App() {
 
         {/* Protected */}
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-        <Route path="/track/solutions-engineer" element={<PrivateRoute><Track /></PrivateRoute>} />
-        <Route path="/track/solutions-engineer/question/:id" element={<PrivateRoute><QuestionDetail /></PrivateRoute>} />
+        <Route path="/track/:trackId" element={<PrivateRoute><Track /></PrivateRoute>} />
+        <Route path="/track/:trackId/question/:id" element={<PrivateRoute><QuestionDetail /></PrivateRoute>} />
         <Route path="/mock" element={<PrivateRoute><MockInterview /></PrivateRoute>} />
         <Route path="/companies" element={<PrivateRoute><Companies /></PrivateRoute>} />
         <Route path="/resources" element={<PrivateRoute><Resources /></PrivateRoute>} />

@@ -78,18 +78,62 @@ export default async function handler(req, res) {
     }
 
     const isCaptured = paymentData.status === 'captured' || paymentData.captured === true;
-    const paymentUserId = paymentData.notes?.userId;
+    const paymentUserId = paymentData.notes?.userId || paymentData.notes?.user_id;
 
     if (isCaptured && paymentUserId === userId) {
-      console.log(`Razorpay confirms payment ${paymentId} is captured for user ${userId}. Upgrading database...`);
+      console.log(`Razorpay confirms payment ${paymentId} is captured for user ${userId}. Upgrading database fallback...`);
 
-      // Fallback upgrade in case webhook is slow/dropped
+      const accessType = paymentData.notes?.accessType || 'all';
+      const accessRole = paymentData.notes?.accessRole || 'all';
+      const purchaseType = paymentData.notes?.purchaseType || 'pass';
+
+      const updatePayload = {
+        is_paid: true,
+        access_type: accessType,
+        access_role: accessRole,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (paymentData.subscription_id || purchaseType === 'subscription') {
+        const subId = paymentData.subscription_id;
+        updatePayload.razorpay_subscription_id = subId;
+        updatePayload.subscription_status = 'active';
+
+        // Query the subscription details to get the exact billing cycle end (current_end)
+        try {
+          console.log(`Querying Razorpay subscription details for ${subId}...`);
+          const subRes = await fetch(`https://api.razorpay.com/v1/subscriptions/${subId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Basic ${credentials}`,
+            },
+          });
+          if (subRes.ok) {
+            const subData = await subRes.json();
+            if (subData.current_end) {
+              updatePayload.paid_until = new Date(subData.current_end * 1000).toISOString();
+            } else {
+              // fallback to 30 days
+              updatePayload.paid_until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+            }
+            if (subData.status) {
+              updatePayload.subscription_status = subData.status;
+            }
+          }
+        } catch (subErr) {
+          console.error('Failed to query subscription details in status check fallback:', subErr);
+          // fallback to 30 days
+          updatePayload.paid_until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        }
+      } else {
+        // Standard pass: 20 days validity
+        updatePayload.pass_created_at = new Date().toISOString();
+        updatePayload.paid_until = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
-          is_paid: true,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', userId);
 
       if (updateError) {

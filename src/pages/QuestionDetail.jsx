@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { questions, isQuestionLocked } from '../data/questions';
+import { getQuestionsForTrack } from '../data/questions';
 import { useAuth } from '../context/AuthContext';
 import { useProgress } from '../context/ProgressContext';
 import FrameworkCard from '../components/FrameworkCard';
@@ -14,16 +14,17 @@ const STATUS_ACTIONS = [
 ];
 
 export default function QuestionDetail() {
-  const { id } = useParams();
-  const { isPaid } = useAuth();
+  const { trackId, id } = useParams();
+  const { isPaid, checkQuestionLocked } = useAuth();
   const { getQuestionStatus, updateStatus } = useProgress();
   const navigate = useNavigate();
 
   const questionId = parseInt(id);
-  const question = questions.find(q => q.id === questionId);
-  const currentIdx = questions.findIndex(q => q.id === questionId);
-  const prevQ = currentIdx > 0 ? questions[currentIdx - 1] : null;
-  const nextQ = currentIdx < questions.length - 1 ? questions[currentIdx + 1] : null;
+  const trackQuestions = getQuestionsForTrack(trackId || 'solutions-engineer');
+  const question = trackQuestions.find(q => q.id === questionId);
+  const currentIdx = trackQuestions.findIndex(q => q.id === questionId);
+  const prevQ = currentIdx > 0 ? trackQuestions[currentIdx - 1] : null;
+  const nextQ = currentIdx < trackQuestions.length - 1 ? trackQuestions[currentIdx + 1] : null;
 
   if (!question) return (
     <div className="page-content">
@@ -35,17 +36,24 @@ export default function QuestionDetail() {
     </div>
   );
 
-  const locked = isQuestionLocked(question.id, isPaid);
-  const status = getQuestionStatus(question.id);
+  const locked = checkQuestionLocked(questionId, trackId);
+  const status = getQuestionStatus(questionId);
+
+  const getTrackDisplayName = () => {
+    if (trackId === 'solutions-engineer') return 'Solutions Engineer';
+    if (trackId === 'technical-account-manager') return 'Technical Account Manager';
+    if (trackId === 'product-support-engineer') return 'Product Support Engineer';
+    return 'Solutions Engineer';
+  };
 
   if (locked) return (
     <div className="page-content">
       <div className="locked-question-page">
         <Lock size={40} />
-        <h2>This question is part of the Pro track</h2>
-        <p>Unlock all 50 questions, answer frameworks, strong/weak answers, and AI feedback.</p>
-        <Link to="/pricing" className="btn-primary">Upgrade to Pro — ₹499/mo</Link>
-        <Link to="/track/solutions-engineer" className="btn-ghost">Back to Question Bank</Link>
+        <h2>This question is locked</h2>
+        <p>Unlock this question, answer frameworks, strong/weak answers, and AI feedback.</p>
+        <Link to="/pricing" className="btn-primary">View Pricing Plans</Link>
+        <Link to={`/track/${trackId || 'solutions-engineer'}`} className="btn-ghost">Back to Question Bank</Link>
       </div>
     </div>
   );
@@ -58,19 +66,19 @@ export default function QuestionDetail() {
           <div className="qd-breadcrumb">
             <Link to="/dashboard">Dashboard</Link>
             <span>/</span>
-            <Link to="/track/solutions-engineer">Question Bank</Link>
+            <Link to={`/track/${trackId}`}>{getTrackDisplayName()}</Link>
             <span>/</span>
             <span>Q{question.id}</span>
           </div>
           <div className="qd-arrows">
             {prevQ ? (
-              <button className="qd-arrow-btn" onClick={() => navigate(`/track/solutions-engineer/question/${prevQ.id}`)}>
+              <button className="qd-arrow-btn" onClick={() => navigate(`/track/${trackId}/question/${prevQ.id}`)}>
                 <ChevronLeft size={18} /> Previous
               </button>
             ) : <span />}
-            <span className="qd-counter">{currentIdx + 1} / {questions.length}</span>
+            <span className="qd-counter">{currentIdx + 1} / {trackQuestions.length}</span>
             {nextQ && (
-              <button className="qd-arrow-btn" onClick={() => navigate(`/track/solutions-engineer/question/${nextQ.id}`)}>
+              <button className="qd-arrow-btn" onClick={() => navigate(`/track/${trackId}/question/${nextQ.id}`)}>
                 Next <ChevronRight size={18} />
               </button>
             )}
@@ -132,7 +140,7 @@ export default function QuestionDetail() {
             {/* Navigation */}
             <div className="qd-bottom-nav">
               {prevQ && (
-                <Link to={`/track/solutions-engineer/question/${prevQ.id}`} className="qd-nav-card prev">
+                <Link to={`/track/${trackId}/question/${prevQ.id}`} className="qd-nav-card prev">
                   <ChevronLeft size={18} />
                   <div>
                     <div className="nav-card-label">Previous</div>
@@ -141,7 +149,7 @@ export default function QuestionDetail() {
                 </Link>
               )}
               {nextQ && (
-                <Link to={`/track/solutions-engineer/question/${nextQ.id}`} className="qd-nav-card next">
+                <Link to={`/track/${trackId}/question/${nextQ.id}`} className="qd-nav-card next">
                   <div style={{ textAlign: 'right' }}>
                     <div className="nav-card-label">Next</div>
                     <div className="nav-card-q">{nextQ.question.substring(0, 55)}...</div>

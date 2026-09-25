@@ -1,6 +1,42 @@
 {
   "rewrites": [
     {
+      "source": "/api/admin-backfill",
+      "destination": "/api/admin-handler?action=backfill"
+    },
+    {
+      "source": "/api/admin-reset-analytics",
+      "destination": "/api/admin-handler?action=reset-analytics"
+    },
+    {
+      "source": "/api/admin-set-password",
+      "destination": "/api/admin-handler?action=set-password"
+    },
+    {
+      "source": "/api/admin-clean-user",
+      "destination": "/api/admin-handler?action=clean-user"
+    },
+    {
+      "source": "/api/admin-fetch-subscriptions",
+      "destination": "/api/admin-handler?action=fetch-razorpay-subscriptions"
+    },
+    {
+      "source": "/api/admin-clean-all",
+      "destination": "/api/admin-handler?action=clean-all-candidates"
+    },
+    {
+      "source": "/api/cancel-subscription",
+      "destination": "/api/subscription-handler?action=cancel"
+    },
+    {
+      "source": "/api/pause-subscription",
+      "destination": "/api/subscription-handler?action=pause"
+    },
+    {
+      "source": "/api/resume-subscription",
+      "destination": "/api/subscription-handler?action=resume"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

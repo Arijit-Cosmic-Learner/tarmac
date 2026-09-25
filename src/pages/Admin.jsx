@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -61,6 +61,10 @@ export default function Admin() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSuccess, setEmailSuccess] = useState(false);
   const [emailError, setEmailError] = useState('');
+
+  // Webhook Grouping & Payload View States
+  const [expandedWebhookGroups, setExpandedWebhookGroups] = useState({});
+  const [expandedPayloads, setExpandedPayloads] = useState({});
 
   // Helper to check if a date string/timestamp is within the selected filter range
   const isWithinDateRange = (dateValue, range) => {
@@ -266,6 +270,20 @@ export default function Admin() {
   const proUsersCount = filteredCandidates.filter(p => p.is_paid).length;
   const totalVisits = filteredCandidates.reduce((acc, p) => acc + (p.visits || 0), 0);
   const totalPaymentAttempts = filteredCandidates.reduce((acc, p) => acc + (p.payment_attempts || 0), 0);
+
+  const activeSubsCount = filteredCandidates.filter(p => p.subscription_status === 'active').length;
+  const cancelledSubsCount = filteredCandidates.filter(p => p.subscription_status === 'cancelled').length;
+  const activePassesCount = filteredCandidates.filter(p => 
+    p.is_paid && 
+    !p.razorpay_subscription_id && 
+    (!p.paid_until || new Date(p.paid_until) > new Date())
+  ).length;
+  const expiredPassesCount = filteredCandidates.filter(p => 
+    !p.is_admin && 
+    p.email !== 'admin.tarmac@gmail.com' && 
+    !!p.paid_until && 
+    new Date(p.paid_until) <= new Date()
+  ).length;
 
   // Copy helper
   const handleCopy = (text) => {
@@ -518,6 +536,33 @@ export default function Admin() {
         </div>
       </div>
 
+      <div className="admin-stats-grid" style={{ marginTop: '1.25rem' }}>
+          <div className="stat-card" style={{ borderLeft: '3px solid #3b82f6' }}>
+            <div className="stat-info">
+              <span className="stat-label">Active Subscriptions</span>
+              <span className="stat-value" style={{ color: '#3b82f6' }}>{activeSubsCount}</span>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: '3px solid var(--lime-400)' }}>
+            <div className="stat-info">
+              <span className="stat-label">Active 20-Day Passes</span>
+              <span className="stat-value" style={{ color: 'var(--lime-400)' }}>{activePassesCount}</span>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: '3px solid #ef4444' }}>
+            <div className="stat-info">
+              <span className="stat-label">Cancelled Subscriptions</span>
+              <span className="stat-value" style={{ color: '#ef4444' }}>{cancelledSubsCount}</span>
+            </div>
+          </div>
+          <div className="stat-card" style={{ borderLeft: '3px solid #f87171' }}>
+            <div className="stat-info">
+              <span className="stat-label">Expired Passes / Cycles</span>
+              <span className="stat-value" style={{ color: '#f87171' }}>{expiredPassesCount}</span>
+            </div>
+          </div>
+        </div>
+
       <div className="charts-grid">
         <div className="chart-container">
           <h3>Weekly Platform Visits</h3>
@@ -613,6 +658,47 @@ export default function Admin() {
     </div>
   );
 
+  const renderTierBadge = (p) => {
+    const isPaid = (p.is_paid || p.subscription_status === 'active') && (!p.paid_until || new Date(p.paid_until) > new Date());
+    const isSub = !!p.subscription_status || !!p.razorpay_subscription_id;
+    const isExpired = !isPaid && !!p.paid_until && new Date(p.paid_until) <= new Date();
+
+    if (p.is_admin) {
+      return <span className="badge-status admin" style={{padding: '0.2rem 0.5rem', borderRadius: '4px', background: '#3b82f6', color: '#fff', fontSize: '0.75rem', fontWeight: 600}}>ADMIN</span>;
+    }
+
+    if (isPaid) {
+      const typeLabel = p.access_type === 'role' ? p.access_role : 'All-Access';
+      const modeLabel = isSub ? 'Sub' : 'Pass';
+      let daysLeft = '';
+      if (p.paid_until && !isSub) {
+        const diff = new Date(p.paid_until) - new Date();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        daysLeft = ` (${days}d left)`;
+      } else if (p.paid_until && isSub) {
+        const diff = new Date(p.paid_until) - new Date();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        daysLeft = ` (renews in ${days}d)`;
+      }
+      
+      const badgeBg = isSub ? 'rgba(59, 130, 246, 0.15)' : 'rgba(163, 230, 53, 0.15)';
+      const badgeBorder = isSub ? 'rgba(59, 130, 246, 0.3)' : 'rgba(163, 230, 53, 0.3)';
+      const badgeColor = isSub ? '#60a5fa' : 'var(--lime-400)';
+
+      return (
+        <span className="badge-status pro" style={{padding: '0.2rem 0.5rem', borderRadius: '4px', background: badgeBg, border: `1px solid ${badgeBorder}`, color: badgeColor, fontSize: '0.75rem', fontWeight: 600}}>
+          {typeLabel} ({modeLabel}){daysLeft}
+        </span>
+      );
+    }
+
+    if (isExpired) {
+      return <span className="badge-status expired" style={{padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', fontSize: '0.75rem', fontWeight: 600}}>EXPIRED</span>;
+    }
+
+    return <span className="badge-status free" style={{padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600}}>FREE</span>;
+  };
+
   const renderCandidates = () => (
     <div className="tab-content">
       <div className="tab-header">
@@ -692,7 +778,7 @@ export default function Admin() {
                   </div>
                 </td>
                 <td>
-                  {p.is_paid ? <span className="badge-status pro" style={{padding: '0.2rem 0.5rem', borderRadius: '4px'}}>PRO</span> : <span className="badge-status free" style={{padding: '0.2rem 0.5rem', borderRadius: '4px'}}>FREE</span>}
+                  {renderTierBadge(p)}
                 </td>
                 <td>
                   <span className="highlight-pill" style={{ background: 'var(--surface-3)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
@@ -858,12 +944,14 @@ export default function Admin() {
       const payloadEmail = (
         log.payload?.payload?.payment?.entity?.email || 
         log.payload?.payload?.payment_link?.entity?.customer?.email || 
+        log.payload?.payload?.subscription?.entity?.customer?.email ||
         ''
       ).toLowerCase();
 
       const payloadName = (
         log.payload?.payload?.payment?.entity?.notes?.name || 
         log.payload?.payload?.payment_link?.entity?.customer?.name || 
+        log.payload?.payload?.subscription?.entity?.notes?.name ||
         ''
       ).toLowerCase();
 
@@ -881,12 +969,71 @@ export default function Admin() {
       return searchMatch && eventMatch && dateMatch;
     });
 
+    // Grouping logic: Group webhooks by user_id if present, else by guest email, else fallback
+    const groups = {};
+    filteredWebhooks.forEach(log => {
+      let groupKey = log.user_id;
+      let email = '';
+      let name = '';
+
+      const userProfile = profiles.find(p => p.id === log.user_id);
+      if (userProfile) {
+        email = userProfile.email;
+        name = userProfile.full_name;
+      } else {
+        email = log.payload?.payload?.payment?.entity?.email || 
+                log.payload?.payload?.payment_link?.entity?.customer?.email ||
+                log.payload?.payload?.subscription?.entity?.customer?.email ||
+                '';
+        name = log.payload?.payload?.payment?.entity?.notes?.name || 
+               log.payload?.payload?.payment_link?.entity?.customer?.name ||
+               log.payload?.payload?.subscription?.entity?.notes?.name ||
+               '';
+      }
+
+      if (!groupKey) {
+        groupKey = email ? `email_${email.toLowerCase()}` : 'guest_unknown';
+      }
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          id: groupKey,
+          name: name || 'Guest User',
+          email: email || 'Unknown Email',
+          phone: userProfile?.phone || log.payload?.payload?.payment?.entity?.contact || log.payload?.payload?.payment_link?.entity?.customer?.contact || '',
+          events: []
+        };
+      }
+      groups[groupKey].events.push(log);
+    });
+
+    // Sort groups by the most recent event time in each group
+    const sortedGroups = Object.values(groups).sort((a, b) => {
+      const aTime = a.events[0]?.created_at ? new Date(a.events[0].created_at).getTime() : 0;
+      const bTime = b.events[0]?.created_at ? new Date(b.events[0].created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    const toggleGroup = (groupId) => {
+      setExpandedWebhookGroups(prev => ({
+        ...prev,
+        [groupId]: !prev[groupId]
+      }));
+    };
+
+    const togglePayload = (logId) => {
+      setExpandedPayloads(prev => ({
+        ...prev,
+        [logId]: !prev[logId]
+      }));
+    };
+
     return (
       <div className="tab-content">
         <div className="tab-header">
           <div>
             <h2>Webhook Monitoring</h2>
-            <p>Real-time stream of events from Razorpay.</p>
+            <p>Real-time stream of events from Razorpay (grouped by student).</p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <select 
@@ -949,82 +1096,181 @@ export default function Admin() {
           </select>
         </div>
 
-        <div className="webhook-list">
+        <div className="webhook-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {loadingWebhooks ? (
             <div className="empty-state"><RefreshCw className="spin" /> Fetching logs...</div>
-          ) : filteredWebhooks.length === 0 ? (
+          ) : sortedGroups.length === 0 ? (
             <div className="empty-state">
               <AlertCircle size={24} style={{marginBottom: '0.5rem', color: 'var(--text-muted)'}}/>
               <p>No matching webhook events found.</p>
             </div>
           ) : (
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Event Type</th>
-                  <th>Student / Customer</th>
-                  <th>Payment / Order / Link ID</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWebhooks.map(log => (
-                  <tr key={log.id}>
-                    <td className="time-col" style={{ verticalAlign: 'middle' }}>
-                      <Clock size={12} /> {new Date(log.created_at).toLocaleString()}
-                    </td>
-                    <td style={{ verticalAlign: 'middle' }}>
-                      <span className="event-badge" style={{ 
-                        background: log.event_type.startsWith('payment_link') ? 'rgba(99,102,241,0.15)' : 'rgba(163,230,53,0.1)',
-                        color: log.event_type.startsWith('payment_link') ? '#818cf8' : 'var(--lime-400)',
-                        border: log.event_type.startsWith('payment_link') ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(163,230,53,0.2)'
-                      }}>{log.event_type}</span>
-                    </td>
-                    <td style={{ verticalAlign: 'middle' }}>
-                      {(() => {
-                        const userProfile = profiles.find(p => p.id === log.user_id);
-                        if (userProfile) {
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{userProfile.full_name}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{userProfile.email}</span>
-                            </div>
-                          );
-                        }
-                        // Fallback to customer/notes details in payload
-                        const email = log.payload?.payload?.payment?.entity?.email || 
-                                      log.payload?.payload?.payment_link?.entity?.customer?.email;
-                        const name = log.payload?.payload?.payment?.entity?.notes?.name || 
-                                     log.payload?.payload?.payment_link?.entity?.customer?.name;
-                        
-                        if (name || email) {
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{name || 'Guest User'}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{email}</span>
-                            </div>
-                          );
-                        }
-                        return <span style={{ color: 'var(--text-muted)' }}>Guest / Unknown</span>;
-                      })()}
-                    </td>
-                    <td className="code-font" style={{ verticalAlign: 'middle', fontSize: '0.8rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {log.payment_id && <span>Pay: {log.payment_id}</span>}
-                        {log.order_id && <span style={{ color: 'var(--text-muted)' }}>Link/Ord: {log.order_id}</span>}
-                        {!log.payment_id && !log.order_id && <span>-</span>}
+            sortedGroups.map(group => {
+              const isExpanded = !!expandedWebhookGroups[group.id];
+              const latestEvent = group.events[0];
+              
+              return (
+                <div key={group.id} style={{
+                  background: 'var(--surface-1)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)',
+                  overflow: 'hidden',
+                  boxShadow: 'var(--card-shadow)'
+                }}>
+                  {/* Collapsible Header */}
+                  <div 
+                    onClick={() => toggleGroup(group.id)}
+                    style={{
+                      padding: '1.25rem 1.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      background: isExpanded ? 'var(--surface-2)' : 'transparent',
+                      transition: 'background 0.2s',
+                      flexWrap: 'wrap',
+                      gap: '1rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      {isExpanded ? <ChevronDown size={18} className="expand-icon" /> : <ChevronRight size={18} className="expand-icon" />}
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{group.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{group.email}</span>
                       </div>
-                    </td>
-                    <td style={{ verticalAlign: 'middle' }}>
-                      <span className={`status-dot ${log.status === 'received' ? 'success' : ''}`}>
-                        {log.status}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                      {group.phone && (
+                        <span className="highlight-pill" style={{ fontSize: '0.75rem' }}>
+                          <Phone size={12} /> {group.phone}
+                        </span>
+                      )}
+
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        background: 'var(--surface-3)',
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: '99px',
+                        color: 'var(--text-secondary)'
+                      }}>
+                        {group.events.length} {group.events.length === 1 ? 'Event' : 'Events'}
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+                      {latestEvent && (
+                        <span className="event-badge" style={{ 
+                          fontSize: '0.75rem',
+                          background: latestEvent.event_type.startsWith('subscription') ? 'rgba(59, 130, 246, 0.12)' : latestEvent.event_type.startsWith('payment_link') ? 'rgba(99,102,241,0.12)' : 'rgba(163,230,53,0.08)',
+                          color: latestEvent.event_type.startsWith('subscription') ? '#60a5fa' : latestEvent.event_type.startsWith('payment_link') ? '#818cf8' : 'var(--lime-400)',
+                          border: latestEvent.event_type.startsWith('subscription') ? '1px solid rgba(59, 130, 246, 0.2)' : latestEvent.event_type.startsWith('payment_link') ? '1px solid rgba(99,102,241,0.2)' : '1px solid rgba(163,230,53,0.1)'
+                        }}>
+                          Latest: {latestEvent.event_type}
+                        </span>
+                      )}
+
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Clock size={12} /> {latestEvent ? new Date(latestEvent.created_at).toLocaleString() : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Expanded Logs Panel */}
+                  {isExpanded && (
+                    <div style={{ padding: '1rem 1.5rem', background: 'rgba(0,0,0,0.1)', borderTop: '1px solid var(--border)' }}>
+                      <table className="admin-table" style={{ background: 'transparent', boxShadow: 'none', border: 'none' }}>
+                        <thead>
+                          <tr style={{ background: 'transparent' }}>
+                            <th style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.75rem' }}>Timestamp</th>
+                            <th style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.75rem' }}>Event Type</th>
+                            <th style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.75rem' }}>IDs (Payment/Order/Subscription)</th>
+                            <th style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.75rem' }}>Status</th>
+                            <th style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.events.map(log => {
+                            const isPayloadOpen = !!expandedPayloads[log.id];
+                            return (
+                              <React.Fragment key={log.id}>
+                                <tr style={{ background: 'transparent' }}>
+                                  <td style={{ padding: '0.75rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                    {new Date(log.created_at).toLocaleString()}
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <span className="event-badge" style={{ 
+                                      background: log.event_type.startsWith('subscription') ? 'rgba(59, 130, 246, 0.1)' : log.event_type.startsWith('payment_link') ? 'rgba(99,102,241,0.1)' : 'rgba(163,230,53,0.06)',
+                                      color: log.event_type.startsWith('subscription') ? '#60a5fa' : log.event_type.startsWith('payment_link') ? '#818cf8' : 'var(--lime-400)',
+                                      border: 'none',
+                                      fontSize: '0.7rem'
+                                    }}>{log.event_type}</span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.03)', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                      {log.payment_id && <span>Pay: {log.payment_id}</span>}
+                                      {log.order_id && <span>Link/Ord: {log.order_id}</span>}
+                                      {!log.payment_id && !log.order_id && <span>-</span>}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <span className={`status-dot ${log.status === 'received' ? 'success' : ''}`} style={{ fontSize: '0.8rem' }}>
+                                      {log.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.03)', textAlign: 'right' }}>
+                                    <button 
+                                      onClick={() => togglePayload(log.id)}
+                                      className="btn-sync"
+                                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', height: 'auto' }}
+                                    >
+                                      {isPayloadOpen ? 'Hide Payload' : 'View Payload'}
+                                    </button>
+                                  </td>
+                                </tr>
+                                
+                                {isPayloadOpen && (
+                                  <tr>
+                                    <td colSpan="5" style={{ padding: '1rem', background: 'var(--surface-3)', borderBottom: '1px solid var(--border)' }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Raw JSON Payload</span>
+                                        <button 
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(JSON.stringify(log.payload, null, 2));
+                                            alert('Payload copied to clipboard!');
+                                          }}
+                                          className="btn-sync" 
+                                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.65rem' }}
+                                        >
+                                          Copy JSON
+                                        </button>
+                                      </div>
+                                      <pre style={{
+                                        margin: 0,
+                                        padding: '1rem',
+                                        background: 'var(--bg)',
+                                        borderRadius: '4px',
+                                        color: 'var(--lime-400)',
+                                        fontFamily: 'monospace',
+                                        fontSize: '0.75rem',
+                                        overflowX: 'auto',
+                                        maxHeight: '250px',
+                                        overflowY: 'auto'
+                                      }}>
+                                        {JSON.stringify(log.payload, null, 2)}
+                                      </pre>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { questions } from '../data/questions';
+import { questions, getQuestionsForTrack } from '../data/questions';
 import { useAuth } from '../context/AuthContext';
 import { useProgress } from '../context/ProgressContext';
 import Timer from '../components/Timer';
@@ -44,13 +44,22 @@ function analyzeAnswer(answer, question) {
 }
 
 export default function MockInterview() {
-  const { isPaid } = useAuth();
+  const { isPaid, accessType, accessRole } = useAuth();
   const { updateStatus } = useProgress();
   const [phase, setPhase] = useState(PHASES.IDLE);
   const [currentQ, setCurrentQ] = useState(null);
   const [answer, setAnswer] = useState('');
   const [result, setResult] = useState(null);
   const [sessionCount, setSessionCount] = useState(0);
+
+  // Set initial track selection based on user's active pass limits
+  const initialTrack = accessType === 'role' && accessRole === 'TAM'
+    ? 'technical-account-manager'
+    : accessType === 'role' && accessRole === 'Tech Support'
+    ? 'product-support-engineer'
+    : 'solutions-engineer';
+
+  const [activeTrack, setActiveTrack] = useState(initialTrack);
 
   if (!isPaid) {
     return (
@@ -66,7 +75,9 @@ export default function MockInterview() {
   }
 
   const startSession = () => {
-    const pool = questions.filter(q => !result || q.id !== currentQ?.id);
+    const trackQuestions = getQuestionsForTrack(activeTrack);
+    const pool = trackQuestions.filter(q => !result || q.id !== currentQ?.id);
+    if (pool.length === 0) return;
     const q = pool[Math.floor(Math.random() * pool.length)];
     setCurrentQ(q);
     setAnswer('');
@@ -92,6 +103,13 @@ export default function MockInterview() {
 
   const reset = () => { setPhase(PHASES.IDLE); setCurrentQ(null); setAnswer(''); setResult(null); };
 
+  const getTrackLabel = (trackId) => {
+    if (trackId === 'solutions-engineer') return 'Solutions Engineer';
+    if (trackId === 'technical-account-manager') return 'Technical Account Manager';
+    if (trackId === 'product-support-engineer') return 'Product Support Engineer';
+    return 'Solutions Engineer';
+  };
+
   return (
     <div className="mock-page page-enter">
       <div className="page-content">
@@ -106,7 +124,30 @@ export default function MockInterview() {
             <div className="mock-idle-card card-lg card">
               <div className="idle-icon">🎯</div>
               <h2>Ready to practice?</h2>
-              <p>A random question from the Solutions Engineer track will appear. You'll get 2 minutes to think and 3 minutes to type your answer.</p>
+
+              {/* Track Selection Selector */}
+              <div style={{ margin: '1.5rem 0', width: '100%', textAlign: 'left' }}>
+                <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block', fontWeight: 600 }}>Select Practice Track</label>
+                {accessType === 'role' ? (
+                  <div style={{ padding: '0.75rem 1rem', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Lock size={14} style={{ color: 'var(--text-muted)' }} />
+                    <span>{getTrackLabel(activeTrack)} (Locked to active pass)</span>
+                  </div>
+                ) : (
+                  <select 
+                    className="form-input" 
+                    value={activeTrack} 
+                    onChange={(e) => setActiveTrack(e.target.value)}
+                    style={{ width: '100%', background: 'var(--surface-1)', color: 'var(--text-primary)', border: '1px solid var(--border)', padding: '0.75rem', borderRadius: 'var(--radius-md)', outline: 'none' }}
+                  >
+                    <option value="solutions-engineer">Solutions Engineer</option>
+                    <option value="technical-account-manager">Technical Account Manager (TAM)</option>
+                    <option value="product-support-engineer">Product Support Engineer (Tech Support)</option>
+                  </select>
+                )}
+              </div>
+
+              <p>A random question from the selected track will appear. You'll get 2 minutes to think and 3 minutes to type your answer.</p>
               <div className="mock-rules">
                 <div className="rule"><span className="rule-dot blue" />2 min: Think phase — organize your thoughts</div>
                 <div className="rule"><span className="rule-dot green" />3 min: Answer phase — type your response</div>
@@ -192,7 +233,7 @@ export default function MockInterview() {
                     )}
 
                     <div className="result-actions">
-                      <Link to={`/track/solutions-engineer/question/${currentQ.id}`} className="btn-secondary">
+                      <Link to={`/track/${activeTrack}/question/${currentQ.id}`} className="btn-secondary">
                         View Full Framework
                       </Link>
                       <button className="btn-primary" onClick={startSession}>

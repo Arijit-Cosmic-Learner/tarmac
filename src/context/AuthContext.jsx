@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { syncGuestAnalytics, trackEvent } from '../lib/analytics';
+import { isQuestionLocked } from '../data/questions';
 
 const AuthContext = createContext(null);
 
@@ -73,7 +74,14 @@ export function AuthProvider({ children }) {
           is_admin: isInitialAdmin,
           streak_count: 0,
           last_active_date: null,
-          streak_history: {}
+          streak_history: {},
+          access_type: null,
+          access_role: null,
+          paid_until: null,
+          pass_created_at: null,
+          razorpay_customer_id: null,
+          razorpay_subscription_id: null,
+          subscription_status: null
         };
         const { data: insertedData, error: insertError } = await supabase
           .from('profiles')
@@ -141,7 +149,10 @@ export function AuthProvider({ children }) {
 
     // Sync phone: prefer the dedicated profiles.phone column, fall back to captured
     const dbPhone = userProfile?.phone || '';
-    if (capturedPhone && !dbPhone) {
+    if (dbPhone) {
+      localStorage.setItem('tarmac_phone_captured', 'true');
+      localStorage.setItem('tarmac_captured_phone_number', dbPhone);
+    } else if (capturedPhone && !dbPhone) {
       // Write phone into the dedicated column directly
       try {
         await supabase.from('profiles').update({ phone: capturedPhone }).eq('id', sessionUser.id);
@@ -381,22 +392,94 @@ export function AuthProvider({ children }) {
     return { ...metadata };
   };
 
-  const upgradeToPaid = async () => {
+  const upgradeToPaid = async (accessType = 'all', accessRole = null) => {
     if (!user) return;
     if (user.id === GUEST_USER.id) {
-      setProfile(p => p ? { ...p, is_paid: true } : GUEST_PROFILE);
+      setProfile(p => p ? { ...p, is_paid: true, access_type: accessType, access_role: accessRole } : GUEST_PROFILE);
       return;
     }
+    const updatePayload = { 
+      is_paid: true,
+      access_type: accessType,
+      access_role: accessRole,
+      pass_created_at: new Date().toISOString(),
+      paid_until: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    
     const { error } = await supabase
       .from('profiles')
-      .update({ is_paid: true })
+      .update(updatePayload)
       .eq('id', user.id);
     
     if (error) throw error;
-    setProfile(p => p ? { ...p, is_paid: true } : null);
+    setProfile(p => p ? { ...p, ...updatePayload } : null);
   };
 
   const isRealUser = user && user.id !== GUEST_USER.id;
+
+  const refreshProfile = async () => {
+    if (!isRealUser) return;
+    const userProfile = await fetchProfile(user);
+    if (userProfile) {
+      setProfile(userProfile);
+    }
+    return userProfile;
+  };
+
+  const isAdminUser = profile?.is_admin || user?.email === 'admin.tarmac@gmail.com' || localStorage.getItem('tarmac_admin_override') === 'true';
+  const isPaidDb = !!profile?.is_paid;
+  const paidUntil = profile?.paid_until;
+  const isSubscriptionActive = profile?.subscription_status === 'active';
+
+  const isSubscriptionPaused = profile?.subscription_status === 'paused';
+
+  let isPaidCalculated = false;
+  if (!isRealUser) {
+    isPaidCalculated = true;
+  } else if (isAdminUser) {
+    isPaidCalculated = true;
+  } else if (isSubscriptionPaused) {
+    isPaidCalculated = false;
+  } else if (isPaidDb) {
+    if (!paidUntil) {
+      isPaidCalculated = true; 
+    } else {
+      isPaidCalculated = new Date(paidUntil) > new Date();
+    }
+  } else if (isSubscriptionActive) {
+    if (paidUntil) {
+      isPaidCalculated = new Date(paidUntil) > new Date();
+    } else {
+      isPaidCalculated = true;
+    }
+  }
+
+  let daysLeft = 0;
+  if (paidUntil) {
+    const diffTime = new Date(paidUntil) - new Date();
+    daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (daysLeft < 0) daysLeft = 0;
+  }
+
+  const accessType = profile?.access_type || null; 
+  const accessRole = profile?.access_role || null; 
+  const subscriptionStatus = profile?.subscription_status || null;
+
+  const isExpired = isRealUser && !isAdminUser && !!paidUntil && new Date(paidUntil) <= new Date() && (isPaidDb || isSubscriptionActive);
+
+  let within30Days = false;
+  if (profile?.pass_created_at) {
+    const diffTime = new Date() - new Date(profile.pass_created_at);
+    const daysSincePurchase = diffTime / (1000 * 60 * 60 * 24);
+    within30Days = daysSincePurchase <= 30;
+  }
+
+  const mustRedirectToPricing = isRealUser && !isAdminUser && !isPaidCalculated && !!profile?.pass_created_at && !within30Days;
+
+  const checkQuestionLocked = useCallback((questionId, trackId = 'solutions-engineer') => {
+    if (!isRealUser || isAdminUser) return false;
+    return isQuestionLocked(questionId, isPaidCalculated, accessType, accessRole, trackId);
+  }, [isRealUser, isAdminUser, isPaidCalculated, accessType, accessRole]);
 
   const value = {
     user: isRealUser ? {
@@ -404,17 +487,24 @@ export function AuthProvider({ children }) {
       email: user.email,
       name: profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0],
       avatar: user.user_metadata?.avatar_url,
-      // Phone: dedicated column takes priority, then localStorage fallback
       phone: profile?.phone || extendedDetails.phone || user.user_metadata?.phone || '',
       company: extendedDetails.company ?? user.user_metadata?.company ?? '',
       role: extendedDetails.role ?? user.user_metadata?.role ?? '',
       linkedin: extendedDetails.linkedin ?? user.user_metadata?.linkedin ?? '',
-      plan: profile?.is_paid ? 'paid' : 'free',
+      plan: isPaidCalculated ? 'paid' : 'free',
       joinedAt: user.created_at,
-      isAdmin: !!profile?.is_admin || user.email === 'admin.tarmac@gmail.com' || localStorage.getItem('tarmac_admin_override') === 'true',
+      isAdmin: isAdminUser,
     } : null,
     loading,
-    isPaid: !!profile?.is_paid,
+    isPaid: isPaidCalculated,
+    daysLeft,
+    accessType,
+    accessRole,
+    subscriptionStatus,
+    isExpired,
+    within30Days,
+    mustRedirectToPricing,
+    checkQuestionLocked,
     isAuthenticated: isRealUser,
     login,
     loginWithGoogle,
@@ -422,6 +512,8 @@ export function AuthProvider({ children }) {
     logout,
     updateUserMetadata,
     upgradeToPaid,
+    refreshProfile,
+    profile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

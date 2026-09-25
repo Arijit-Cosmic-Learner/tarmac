@@ -25,11 +25,11 @@ const STATUS_OPTIONS = [
   { value: 'confident', label: 'Confident', icon: Star },
 ];
 
-export default function QuestionCard({ question, compact = false }) {
+export default function QuestionCard({ question, compact = false, trackId = 'solutions-engineer' }) {
   const { getQuestionStatus, updateStatus } = useProgress();
-  const { isPaid } = useAuth();
+  const { checkQuestionLocked } = useAuth();
   const status = getQuestionStatus(question.id);
-  const locked = isQuestionLocked(question.id, isPaid);
+  const locked = checkQuestionLocked(question.id, trackId);
   const catColor = CATEGORY_COLORS[question.category] || 'blue';
   const diffColor = DIFFICULTY_COLORS[question.difficulty] || 'lime';
 
@@ -76,7 +76,7 @@ export default function QuestionCard({ question, compact = false }) {
         )}
 
         {!locked && (
-          <Link to={`/track/solutions-engineer/question/${question.id}`} className="view-btn">
+          <Link to={`/track/${trackId}/question/${question.id}`} className="view-btn">
             Study →
           </Link>
         )}
